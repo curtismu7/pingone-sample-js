@@ -10,7 +10,6 @@ class SettingsPage {
         await this.waitForUtils();
         this.setupEventListeners();
         this.loadSettings();
-        this.updatePageLanguage();
         this.startTokenStatusCheck();
         this.initializeTooltips();
         this.updateDefaultFileDisplay();
@@ -514,22 +513,6 @@ class SettingsPage {
         } catch (error) {
             utils.log(`Failed to get current settings: ${error.message}`, 'error');
             return {};
-        }
-    }
-
-    updatePageLanguage() {
-        const languageSelect = document.getElementById('language-select');
-        if (languageSelect) {
-            const savedLanguage = this.getCurrentSettings().language || 'en';
-            languageSelect.value = savedLanguage;
-            
-            languageSelect.addEventListener('change', (e) => {
-                const newLanguage = e.target.value;
-                const currentSettings = this.getCurrentSettings();
-                currentSettings.language = newLanguage;
-                localStorage.setItem('pingone-settings', JSON.stringify(currentSettings));
-                utils.log('Language changed', 'info');
-            });
         }
     }
 }

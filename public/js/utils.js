@@ -6,16 +6,11 @@ class Utils {
             token: null,
             expiresAt: null
         };
-        this.currentLanguage = 'en';
-        this.translations = {};
         this.init();
     }
 
     async init() {
         this.setupSidebar();
-        await this.loadTranslations();
-        this.setupLanguageSelector();
-        this.setupTooltips();
         this.setupModals();
         this.setupSpinner();
         this.loadSettings();
@@ -92,68 +87,9 @@ class Utils {
         this.log('Token cache cleared', 'info');
     }
 
-    // Internationalization (i18n)
-    async loadTranslations() {
-        try {
-            const response = await fetch(`/locales/${this.currentLanguage}.json`);
-            if (response.ok) {
-                this.translations = await response.json();
-            } else {
-                // Fallback to English
-                const enResponse = await fetch('/locales/en.json');
-                if (enResponse.ok) {
-                    this.translations = await enResponse.json();
-                }
-            }
-        } catch (error) {
-            this.log(`Failed to load translations: ${error.message}`, 'error');
-        }
-    }
-
-    t(key, params = {}) {
-        let text = this.translations[key] || key;
-        
-        // Replace parameters
-        Object.keys(params).forEach(param => {
-            text = text.replace(new RegExp(`{${param}}`, 'g'), params[param]);
-        });
-        
-        return text;
-    }
-
-    updatePageLanguage() {
-        document.querySelectorAll('[data-i18n]').forEach(element => {
-            const key = element.getAttribute('data-i18n');
-            if (key) {
-                element.textContent = this.t(key);
-            }
-        });
-        
-        // Update page title
-        const titleElement = document.querySelector('title');
-        if (titleElement) {
-            const pageTitle = this.t('page.title');
-            titleElement.textContent = `Ping Identity - ${pageTitle}`;
-        }
-    }
-
-    setupLanguageSelector() {
-        const languageSelect = document.getElementById('language-select');
-        if (languageSelect) {
-            languageSelect.value = this.currentLanguage;
-            languageSelect.addEventListener('change', async (e) => {
-                this.currentLanguage = e.target.value;
-                await this.loadTranslations();
-                this.updatePageLanguage();
-                this.saveSettings();
-            });
-        }
-    }
-
     // Settings Management
     saveSettings() {
         const settings = {
-            language: this.currentLanguage,
             // Add other settings as needed
         };
         
@@ -170,7 +106,6 @@ class Utils {
             const settings = localStorage.getItem('pingone-settings');
             if (settings) {
                 const parsed = JSON.parse(settings);
-                this.currentLanguage = parsed.language || 'en';
                 this.log('Settings loaded', 'info');
             }
         } catch (error) {
@@ -249,33 +184,30 @@ class Utils {
         const modalConfirm = document.getElementById('modal-confirm');
         const modalCancel = document.getElementById('modal-cancel');
 
-        if (modalTitle) modalTitle.textContent = this.t(title);
-        if (modalBody) modalBody.innerHTML = content;
-
-        // Show/hide buttons based on options
-        if (modalConfirm) {
-            modalConfirm.style.display = options.showConfirm !== false ? 'inline-flex' : 'none';
-            if (options.confirmText) {
-                modalConfirm.textContent = this.t(options.confirmText);
-            }
+        if (!modal || !modalTitle || !modalBody || !modalConfirm || !modalCancel) {
+            return;
         }
 
-        if (modalCancel) {
-            modalCancel.style.display = options.showCancel !== false ? 'inline-flex' : 'none';
-            if (options.cancelText) {
-                modalCancel.textContent = this.t(options.cancelText);
-            }
-        }
+        modalTitle.textContent = title;
+        modalBody.innerHTML = content;
 
-        // Set up confirm callback
-        if (modalConfirm && options.onConfirm) {
-            const confirmHandler = () => {
+        modalConfirm.textContent = options.confirmText || 'OK';
+        modalCancel.textContent = options.cancelText || 'Cancel';
+
+        modalCancel.classList.toggle('hidden', !options.showCancel);
+
+        // Cloned to remove previous event listeners
+        const newConfirm = modalConfirm.cloneNode(true);
+        modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
+        
+        const confirmHandler = () => {
+            if (options.onConfirm) {
                 options.onConfirm();
-                this.hideModal();
-                modalConfirm.removeEventListener('click', confirmHandler);
-            };
-            modalConfirm.addEventListener('click', confirmHandler);
-        }
+            }
+            this.hideModal();
+        };
+
+        newConfirm.addEventListener('click', confirmHandler);
 
         modal.classList.remove('hidden');
     }
@@ -297,7 +229,7 @@ class Utils {
         const spinnerText = document.getElementById('spinner-text');
         
         if (spinnerText) {
-            spinnerText.textContent = this.t(text);
+            spinnerText.textContent = text;
         }
         
         if (spinner) {
@@ -318,7 +250,7 @@ class Utils {
         tippy('[data-tippy]', {
             content: (reference) => {
                 const key = reference.getAttribute('data-tippy');
-                return this.t(key);
+                return key;
             },
             placement: 'top',
             arrow: true,
@@ -510,11 +442,11 @@ class Utils {
 
     // Date/Time Utilities
     formatDate(date) {
-        return new Date(date).toLocaleDateString(this.currentLanguage);
+        return new Date(date).toLocaleDateString();
     }
 
     formatDateTime(date) {
-        return new Date(date).toLocaleString(this.currentLanguage);
+        return new Date(date).toLocaleString();
     }
 
     // Network Utilities
