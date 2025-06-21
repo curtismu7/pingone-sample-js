@@ -462,21 +462,41 @@ class Utils {
 
     // Error Handling
     handleError(error, context = '') {
-        const errorMessage = error.message || 'An unknown error occurred';
-        this.log(`Error in ${context}: ${errorMessage}`, 'error', error);
+        const errorMessage = error.message || 'An unknown error occurred.';
+        this.log(`Error in ${context}: ${errorMessage}`, 'error', { error: error.toString(), stack: error.stack });
+
+        // Hide any active spinners or progress bars
+        this.hideSpinner();
         
-        this.showModal(
-            'common.error',
-            `<p>${this.t('common.errorMessage')}</p><p><strong>${errorMessage}</strong></p>`,
-            {
-                confirmText: 'common.ok',
-                showCancel: false
-            }
-        );
+        if (typeof hideImportProgress === 'function') {
+            hideImportProgress();
+        }
+
+        if (errorMessage.includes('Please configure your PingOne credentials')) {
+            this.showModal(
+                'Credentials Required',
+                'You need to configure your PingOne credentials before performing this action.',
+                {
+                    confirmText: 'Go to Configuration',
+                    onConfirm: () => {
+                        window.location.href = 'settings.html';
+                    },
+                    showCancel: true,
+                    cancelText: 'Cancel'
+                }
+            );
+        } else {
+            this.showModal(
+                `Error in ${context}`,
+                errorMessage,
+                { confirmText: 'OK', showCancel: false }
+            );
+        }
     }
 
     // Validation
     validateEmail(email) {
+        if (!email) return false;
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
     }

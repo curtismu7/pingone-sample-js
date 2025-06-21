@@ -230,6 +230,7 @@ class MainPage {
 
         try {
             this.importInProgress = true;
+            utils.showSpinner('Processing file...');
             this.showImportProgress();
 
             const csvData = await utils.parseCSV(this.currentFile);
@@ -242,6 +243,7 @@ class MainPage {
                 throw new Error('Please configure your PingOne credentials in the Configuration page');
             }
 
+            utils.showSpinner('Importing users...');
             await this.processImport(csvData, credentials);
 
         } catch (error) {
@@ -249,6 +251,7 @@ class MainPage {
         } finally {
             this.importInProgress = false;
             this.hideImportProgress();
+            utils.hideSpinner();
         }
     }
 
