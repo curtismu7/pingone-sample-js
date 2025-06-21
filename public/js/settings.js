@@ -2,7 +2,6 @@
 
 class SettingsPage {
     constructor() {
-        this.currentFile = null;
         this.init();
     }
 
@@ -38,206 +37,117 @@ class SettingsPage {
         });
     }
 
-    updateDefaultFileDisplay() {
-        const defaultFileDisplay = document.getElementById('default-file-display');
-        const defaultFileName = document.getElementById('default-file-name');
-        
-        const settings = this.getCurrentSettings();
-        const fileName = this.currentFile ? this.currentFile.name : settings.defaultFile;
-
-        if (fileName) {
-            defaultFileName.textContent = fileName;
-            defaultFileDisplay.classList.remove('hidden');
-        } else {
-            defaultFileDisplay.classList.add('hidden');
-        }
-    }
-
     setupEventListeners() {
-        // Credentials form
-        const credentialsForm = document.getElementById('credentials-form');
-        if (credentialsForm) {
-            credentialsForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.saveCredentials();
-            });
-        }
-
-        // Test credentials button
-        const testBtn = document.getElementById('test-credentials');
-        if (testBtn) {
-            testBtn.addEventListener('click', () => this.testCredentials());
-        }
-
-        // App settings form
-        const appSettingsForm = document.getElementById('app-settings-form');
-        if (appSettingsForm) {
-            appSettingsForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.saveAppSettings();
-            });
-        }
-
-        // Default file input
-        const defaultFileInput = document.getElementById('default-file');
-        if (defaultFileInput) {
-            defaultFileInput.addEventListener('change', (e) => this.handleDefaultFileSelect(e));
-        }
-
-        // Action buttons
-        const saveSettingsBtn = document.getElementById('save-settings');
-        if (saveSettingsBtn) {
-            saveSettingsBtn.addEventListener('click', () => this.saveAllSettings());
-        }
-
-        const deleteSettingsBtn = document.getElementById('delete-settings');
-        if (deleteSettingsBtn) {
-            deleteSettingsBtn.addEventListener('click', () => this.deleteSettings());
-        }
-
-        const resetSettingsBtn = document.getElementById('reset-settings');
-        if (resetSettingsBtn) {
-            resetSettingsBtn.addEventListener('click', () => this.resetSettings());
-        }
-
-        // Column mapping changes
-        this.setupColumnMappingListeners();
+        document.getElementById('save-all-settings')?.addEventListener('click', () => this.saveAllSettings());
+        document.getElementById('test-credentials')?.addEventListener('click', () => this.testCredentials());
+        document.getElementById('default-file')?.addEventListener('change', (e) => this.handleDefaultFileSelect(e));
+        document.getElementById('toggle-secret')?.addEventListener('click', () => this.toggleSecretVisibility());
     }
 
-    setupColumnMappingListeners() {
-        const columnSelects = document.querySelectorAll('.column-select');
-        columnSelects.forEach(select => {
-            select.addEventListener('change', () => {
-                this.saveColumnMapping();
-            });
-        });
+    toggleSecretVisibility() {
+        const secretInput = document.getElementById('client-secret');
+        const icon = document.getElementById('toggle-secret');
+        if (secretInput.type === 'password') {
+            secretInput.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            secretInput.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
     }
 
     loadSettings() {
         try {
-            const settings = localStorage.getItem('pingone-settings');
+            const settings = utils.loadSettings();
             if (settings) {
-                const parsed = JSON.parse(settings);
-                this.populateFormFields(parsed);
+                this.populateFormFields(settings);
                 utils.log('Settings loaded from storage', 'info');
             }
         } catch (error) {
-            utils.log(`Failed to load settings: ${error.message}`, 'error');
+            utils.handleError(error, 'loadSettings');
         }
     }
 
     populateFormFields(settings) {
         // Credentials
-        if (settings.environmentId) {
-            document.getElementById('environment-id').value = settings.environmentId;
-        }
-        if (settings.clientId) {
-            document.getElementById('client-id').value = settings.clientId;
-        }
-        if (settings.clientSecret) {
-            document.getElementById('client-secret').value = settings.clientSecret;
-        }
-        if (settings.baseUrl) {
-            document.getElementById('base-url').value = settings.baseUrl;
-        }
-        if (settings.saveCredentials !== undefined) {
-            document.getElementById('save-credentials').checked = settings.saveCredentials;
-        }
-        if (settings.useClientSecret !== undefined) {
-            document.getElementById('use-client-secret').checked = settings.useClientSecret;
-        }
+        document.getElementById('environment-id').value = settings.environmentId || '';
+        document.getElementById('client-id').value = settings.clientId || '';
+        document.getElementById('client-secret').value = settings.clientSecret || '';
+        document.getElementById('base-url').value = settings.baseUrl || 'https://api.pingone.com';
+        document.getElementById('save-credentials').checked = settings.saveCredentials === true;
+        document.getElementById('use-client-secret').checked = settings.useClientSecret !== false; // Default to true
 
         // App settings
         if (settings.recordsPerPage) {
             document.getElementById('records-per-page').value = settings.recordsPerPage;
         }
-        if (settings.defaultFile) {
-            this.updateCurrentDefaultFile(settings.defaultFile);
-        }
-
-        // Column mapping
-        if (settings.usernameColumn) {
-            document.getElementById('username-column').value = settings.usernameColumn;
-        }
-        if (settings.emailColumn) {
-            document.getElementById('email-column').value = settings.emailColumn;
-        }
-        if (settings.firstnameColumn) {
-            document.getElementById('firstname-column').value = settings.firstnameColumn;
-        }
-        if (settings.lastnameColumn) {
-            document.getElementById('lastname-column').value = settings.lastnameColumn;
-        }
-        if (settings.populationColumn) {
-            document.getElementById('population-column').value = settings.populationColumn;
+        if (settings.defaultFileName) {
+            this.updateDefaultFileDisplay(settings.defaultFileName);
         }
     }
 
-    async saveCredentials() {
+    async saveAllSettings() {
+        const saveBtn = document.getElementById('save-all-settings');
         try {
-            const formData = new FormData(document.getElementById('credentials-form'));
-            const credentials = {
-                environmentId: formData.get('environmentId'),
-                clientId: formData.get('clientId'),
-                clientSecret: formData.get('clientSecret'),
-                baseUrl: formData.get('baseUrl'),
-                saveCredentials: formData.get('saveCredentials') === 'on',
-                useClientSecret: formData.get('useClientSecret') === 'on'
+            const settings = {
+                environmentId: document.getElementById('environment-id').value,
+                clientId: document.getElementById('client-id').value,
+                baseUrl: document.getElementById('base-url').value,
+                saveCredentials: document.getElementById('save-credentials').checked,
+                useClientSecret: document.getElementById('use-client-secret').checked,
+                recordsPerPage: document.getElementById('records-per-page').value,
+                defaultFileName: document.getElementById('current-default-file')?.textContent || null
             };
 
-            // Validate required fields
-            if (!credentials.environmentId || !credentials.clientId || !credentials.clientSecret) {
-                throw new Error('Environment ID, Client ID, and Client Secret are required');
-            }
-
-            // Save to localStorage
-            const currentSettings = this.getCurrentSettings();
-            const updatedSettings = { ...currentSettings, ...credentials };
-            
-            if (credentials.saveCredentials) {
-                localStorage.setItem('pingone-settings', JSON.stringify(updatedSettings));
-                utils.log('Credentials saved', 'info');
+            if (settings.saveCredentials) {
+                settings.clientSecret = document.getElementById('client-secret').value;
             } else {
-                // Clear sensitive data if not saving
-                delete updatedSettings.clientSecret;
-                localStorage.setItem('pingone-settings', JSON.stringify(updatedSettings));
-                utils.log('Credentials validated but not saved', 'info');
+                delete settings.clientSecret;
             }
+            
+            localStorage.setItem('pingone-settings', JSON.stringify(settings));
+            utils.log('All settings saved', 'info', settings);
 
-            // Clear token cache to force new token
-            utils.clearTokenCache();
-
-            utils.showModal(
-                'Credentials Saved',
-                'Your credentials have been successfully saved and validated.',
-                { confirmText: 'OK', showCancel: false }
-            );
+            // Update button for visual feedback
+            saveBtn.textContent = 'Saved ✓';
+            saveBtn.classList.add('saved');
+            setTimeout(() => {
+                saveBtn.textContent = 'Save Configuration';
+                saveBtn.classList.remove('saved');
+            }, 2000);
 
         } catch (error) {
-            utils.handleError(error, 'saveCredentials');
+            utils.handleError(error, 'saveAllSettings');
+            saveBtn.textContent = 'Save Failed';
+            setTimeout(() => {
+                saveBtn.textContent = 'Save Configuration';
+            }, 2000);
         }
     }
 
     async testCredentials() {
         try {
-            const formData = new FormData(document.getElementById('credentials-form'));
+            utils.showSpinner('Testing credentials...');
+            this.updateTokenStatus('loading', 'Testing...');
+
             const credentials = {
-                environmentId: formData.get('environmentId'),
-                clientId: formData.get('clientId'),
-                clientSecret: formData.get('clientSecret')
+                environmentId: document.getElementById('environment-id').value,
+                clientId: document.getElementById('client-id').value,
+                clientSecret: document.getElementById('client-secret').value
             };
 
-            if (!credentials.environmentId || !credentials.clientId || !credentials.clientSecret) {
-                throw new Error('Environment ID, Client ID, and Client Secret are required');
+            if (!credentials.environmentId || !credentials.clientId) {
+                throw new Error('Environment ID and Client ID are required to test credentials.');
             }
 
-            utils.showSpinner('Testing credentials...');
-            this.updateTokenStatus('loading', 'Testing credentials...');
-
-            await utils.getWorkerToken(credentials.environmentId, credentials.clientId, credentials.clientSecret);
-            this.updateTokenStatus('valid', 'Credentials are valid');
+            await utils.getWorkerToken(credentials.environmentId, credentials.clientId, credentials.clientSecret, true); // Force refetch
+            
+            this.updateTokenStatus('valid', '✓ Credentials are valid');
         } catch (error) {
-            this.updateTokenStatus('expired', `Failed to get token: ${error.message}`);
+            const errorMessage = error.message || 'An unknown error occurred';
+            this.updateTokenStatus('expired', `✗ ${errorMessage}`);
             utils.handleError(error, 'testCredentials');
         } finally {
             utils.hideSpinner();
@@ -247,218 +157,50 @@ class SettingsPage {
     updateTokenStatus(status, message) {
         const tokenStatus = document.getElementById('token-status');
         if (!tokenStatus) return;
-
-        tokenStatus.className = `token-status ${status}`;
         tokenStatus.textContent = message;
+        tokenStatus.className = `token-status ${status}`;
     }
 
     startTokenStatusCheck() {
         this.checkTokenStatus();
-        setInterval(() => this.checkTokenStatus(), 60000); // Check every minute
+        setInterval(() => this.checkTokenStatus(), 60000);
     }
 
     async checkTokenStatus() {
-        const tokenStatus = utils.getTokenStatus();
-        if (tokenStatus.valid) {
-            const minutes = Math.round(tokenStatus.timeRemaining / 60000);
-            this.updateTokenStatus('valid', `Token valid (${minutes} minutes remaining)`);
-        } else {
-            this.updateTokenStatus('expired', 'Token expired or not set');
-        }
-    }
-
-    async handleDefaultFileSelect(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        if (!file.name.toLowerCase().endsWith('.csv')) {
-            utils.showModal('Invalid File', 'Please select a valid CSV file.', { confirmText: 'OK', showCancel: false });
-            return;
-        }
-        
-        this.currentFile = file;
-        this.updateCurrentDefaultFile(file.name);
-        
-        const csvText = await file.text();
-        const headers = this.parseCSVHeaders(csvText);
-        this.populateColumnMapping(headers);
-    }
-
-    parseCSVHeaders(csvText) {
-        const firstLine = csvText.split('\n')[0];
-        return firstLine.split(',').map(h => h.trim());
-    }
-
-    updateCurrentDefaultFile(filename) {
-        const display = document.getElementById('current-default-file');
-        if (display) {
-            display.textContent = `Current: ${filename}`;
-        }
-    }
-
-    populateColumnMapping(headers) {
-        const selects = document.querySelectorAll('.column-select');
-        selects.forEach(select => {
-            // Clear existing options except the first one
-            while (select.children.length > 1) {
-                select.removeChild(select.lastChild);
+        try {
+            const credentials = utils.getStoredCredentials();
+            if (!credentials) {
+                this.updateTokenStatus('unknown', 'Enter credentials to test.');
+                return;
             }
-            
-            // Add new options
-            headers.forEach(header => {
-                const option = document.createElement('option');
-                option.value = header;
-                option.textContent = header;
-                select.appendChild(option);
-            });
-        });
-    }
-
-    saveColumnMapping() {
-        const settings = this.getCurrentSettings();
-        settings.usernameColumn = document.getElementById('username-column').value;
-        settings.emailColumn = document.getElementById('email-column').value;
-        settings.firstnameColumn = document.getElementById('firstname-column').value;
-        settings.lastnameColumn = document.getElementById('lastname-column').value;
-        settings.populationColumn = document.getElementById('population-column').value;
-        localStorage.setItem('pingone-settings', JSON.stringify(settings));
-    }
-
-    saveAppSettings() {
-        try {
-            const formData = new FormData(document.getElementById('app-settings-form'));
-            const appSettings = {
-                language: formData.get('language'),
-                recordsPerPage: formData.get('recordsPerPage'),
-                defaultFile: this.currentFile ? this.currentFile.name : null
-            };
-
-            const currentSettings = this.getCurrentSettings();
-            const updatedSettings = { ...currentSettings, ...appSettings };
-            localStorage.setItem('pingone-settings', JSON.stringify(updatedSettings));
-            
-            utils.log('App settings saved', 'info');
-        } catch (error) {
-            utils.log(`Failed to save app settings: ${error.message}`, 'error');
-        }
-    }
-
-    async saveAllSettings() {
-        try {
-            utils.showSpinner('Saving settings...');
-
-            const credentialsFormData = new FormData(document.getElementById('credentials-form'));
-            const appSettingsFormData = new FormData(document.getElementById('app-settings-form'));
-
-            const settings = this.getCurrentSettings();
-
-            // Handle credential persistence
-            const saveCredentials = document.getElementById('save-credentials').checked;
-            settings.saveCredentials = saveCredentials;
-
-            if (saveCredentials) {
-                settings.environmentId = credentialsFormData.get('environmentId');
-                settings.clientId = credentialsFormData.get('clientId');
-                settings.clientSecret = credentialsFormData.get('clientSecret');
-                settings.baseUrl = credentialsFormData.get('baseUrl');
+            // A simple check without forcing a token refetch
+            if (utils.isTokenValid()) {
+                 this.updateTokenStatus('valid', '✓ Credentials appear to be valid.');
             } else {
-                delete settings.environmentId;
-                delete settings.clientId;
-                delete settings.clientSecret;
+                 this.updateTokenStatus('expired', 'Credentials may be expired or invalid. Please test.');
             }
-
-            // Other settings
-            settings.useClientSecret = document.getElementById('use-client-secret').checked;
-            settings.recordsPerPage = appSettingsFormData.get('recordsPerPage');
-            if (this.currentFile) {
-                settings.defaultFile = this.currentFile.name;
-            }
-
-            this.saveColumnMapping();
-            const mappingSettings = this.getCurrentSettings();
-            const finalSettings = { ...settings, ...mappingSettings };
-            
-            localStorage.setItem('pingone-settings', JSON.stringify(finalSettings));
-            
-            utils.log('All settings saved', 'info');
-            utils.hideSpinner();
-
-            utils.showModal(
-                'Settings Saved',
-                'All your settings have been successfully saved.',
-                { confirmText: 'OK', showCancel: false }
-            );
-
         } catch (error) {
-            utils.handleError(error, 'saveAllSettings');
+            this.updateTokenStatus('expired', '✗ Could not verify token status.');
         }
     }
 
-    async deleteSettings() {
-        utils.showModal('Delete Settings', 'Are you sure you want to delete all settings? This action cannot be undone.', {
-            confirmText: 'Delete',
-            onConfirm: () => {
-                localStorage.removeItem('pingone-settings');
-                this.resetFormFields();
-                utils.log('All settings deleted', 'info');
-                utils.showModal('Settings Deleted', 'All settings have been deleted.', { confirmText: 'OK', showCancel: false });
-            },
-            showCancel: true
-        });
+    handleDefaultFileSelect(event) {
+        const file = event.target.files[0];
+        if (file) {
+            this.updateDefaultFileDisplay(file.name);
+            // We only store the name, not the file content itself in settings
+        }
     }
-
-    async resetSettings() {
-        utils.showModal('Reset Settings', 'Are you sure you want to reset all settings to their default values?', {
-            confirmText: 'Reset',
-            onConfirm: () => {
-                localStorage.removeItem('pingone-settings');
-                this.resetFormFields();
-                utils.log('All settings reset', 'info');
-                utils.showModal('Settings Reset', 'All settings have been reset to their default values.', { confirmText: 'OK', showCancel: false });
-            },
-            showCancel: true
-        });
-    }
-
-    resetFormFields() {
-        // Reset all form fields to default values
-        document.getElementById('environment-id').value = '';
-        document.getElementById('client-id').value = '';
-        document.getElementById('client-secret').value = '';
-        document.getElementById('base-url').value = 'https://api.pingone.com';
-        document.getElementById('save-credentials').checked = false;
-        document.getElementById('use-client-secret').checked = true;
-        document.getElementById('language').value = 'en';
-        document.getElementById('records-per-page').value = '25';
-        document.getElementById('default-file').value = '';
-        document.getElementById('current-default-file').textContent = '';
-        
-        // Reset column mapping
-        const columnSelects = document.querySelectorAll('.column-select');
-        columnSelects.forEach(select => {
-            select.value = '';
-        });
-
-        // Clear current file
-        this.currentFile = null;
-        this.updateDefaultFileDisplay();
-        
-        // Clear token status
-        this.updateTokenStatus('', '');
-    }
-
-    getCurrentSettings() {
-        try {
-            const settings = localStorage.getItem('pingone-settings');
-            return settings ? JSON.parse(settings) : {};
-        } catch (error) {
-            utils.log(`Failed to get current settings: ${error.message}`, 'error');
-            return {};
+    
+    updateDefaultFileDisplay(fileName) {
+        const display = document.getElementById('current-default-file');
+        if(display) {
+            display.textContent = fileName ? `Current: ${fileName}` : '';
         }
     }
 }
 
 // Initialize the settings page when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new SettingsPage();
+    window.settingsPage = new SettingsPage();
 }); 

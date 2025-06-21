@@ -18,43 +18,36 @@ class Utils {
     }
 
     // Token Management
-    async getWorkerToken(environmentId, clientId, clientSecret) {
+    async getWorkerToken(environmentId, clientId, clientSecret, force = false) {
         const now = Date.now();
         
-        // Check if we have a valid cached token
-        if (this.tokenCache.token && this.tokenCache.expiresAt && now < this.tokenCache.expiresAt) {
+        // Check cache unless forced
+        if (!force && this.isTokenValid()) {
             this.log('Token cache hit', 'info');
             return this.tokenCache.token;
         }
 
-        this.log('Getting new worker token', 'info');
+        this.log('Getting new worker token', 'info', { force });
         
         try {
             const response = await fetch('/api/token', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    environmentId,
-                    clientId,
-                    clientSecret
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ environmentId, clientId, clientSecret })
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const errorData = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
             }
 
             const data = await response.json();
             
-            if (data.error) {
-                throw new Error(data.error);
-            }
+            if (data.error) { throw new Error(data.error); }
 
             // Cache token for 55 minutes
             this.tokenCache.token = data.access_token;
-            this.tokenCache.expiresAt = now + (55 * 60 * 1000); // 55 minutes
+            this.tokenCache.expiresAt = now + (55 * 60 * 1000);
             
             this.log('Worker token obtained and cached', 'info');
             return data.access_token;
@@ -65,26 +58,12 @@ class Utils {
         }
     }
 
-    getTokenStatus() {
-        if (!this.tokenCache.token) {
-            return { valid: false, expiresAt: null };
-        }
-        
-        const now = Date.now();
-        const valid = now < this.tokenCache.expiresAt;
-        
-        return {
-            valid,
-            expiresAt: this.tokenCache.expiresAt,
-            timeRemaining: Math.max(0, this.tokenCache.expiresAt - now)
-        };
+    isTokenValid() {
+        return this.tokenCache.token && this.tokenCache.expiresAt && Date.now() < this.tokenCache.expiresAt;
     }
 
     clearTokenCache() {
-        this.tokenCache = {
-            token: null,
-            expiresAt: null
-        };
+        this.tokenCache = { token: null, expiresAt: null };
         this.log('Token cache cleared', 'info');
     }
 
@@ -100,7 +79,6 @@ class Utils {
         if (creds.environmentId && creds.clientId) {
             return creds;
         }
-        
         return null;
     }
 
@@ -119,26 +97,23 @@ class Utils {
 
     loadSettings() {
         try {
-            const settings = localStorage.getItem('pingone-settings');
-            if (settings) {
-                this.settings = JSON.parse(settings);
+            const settingsString = localStorage.getItem('pingone-settings');
+            if (settingsString) {
+                this.settings = JSON.parse(settingsString);
                 this.log('Settings loaded', 'info');
+                return this.settings;
             }
         } catch (error) {
             this.log(`Failed to load settings: ${error.message}`, 'error');
             this.settings = {};
         }
+        return null;
     }
 
     // Logging
     log(message, level = 'info', data = null) {
         const timestamp = new Date().toISOString();
-        const logEntry = {
-            timestamp,
-            level,
-            message,
-            data
-        };
+        const logEntry = { timestamp, level, message, data, source: 'client' };
 
         // Console logging
         const consoleMethod = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log';
@@ -169,26 +144,20 @@ class Utils {
         const modalClose = document.getElementById('modal-close');
         const modalCancel = document.getElementById('modal-cancel');
 
-        if (modalClose) {
-            modalClose.addEventListener('click', () => this.hideModal());
-        }
+        const closeModal = () => this.hideModal();
 
-        if (modalCancel) {
-            modalCancel.addEventListener('click', () => this.hideModal());
-        }
+        modalClose?.addEventListener('click', closeModal);
+        modalCancel?.addEventListener('click', closeModal);
 
-        if (modal) {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    this.hideModal();
-                }
-            });
-        }
+        modal?.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
 
-        // Close modal on Escape key
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
-                this.hideModal();
+            if (e.key === 'Escape' && !modal?.classList.contains('hidden')) {
+                closeModal();
             }
         });
     }
@@ -212,10 +181,8 @@ class Utils {
 
         modalCancel.classList.toggle('hidden', !options.showCancel);
 
-        // Replace the button with a clone of itself to remove all old event listeners
         const newConfirm = modalConfirm.cloneNode(true);
         modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
-        modalConfirm = newConfirm;
         
         const confirmHandler = () => {
             if (options.onConfirm) {
@@ -224,7 +191,7 @@ class Utils {
             this.hideModal();
         };
 
-        modalConfirm.addEventListener('click', confirmHandler);
+        newConfirm.addEventListener('click', confirmHandler, { once: true });
 
         modal.classList.remove('hidden');
     }
@@ -241,7 +208,7 @@ class Utils {
         // Spinner is already in HTML, just need to control visibility
     }
 
-    showSpinner(text = 'common.loading') {
+    showSpinner(text = 'Loading...') {
         const spinner = document.getElementById('spinner');
         const spinnerText = document.getElementById('spinner-text');
         
@@ -276,35 +243,29 @@ class Utils {
         });
     }
 
-    // CSV Processing with simple parser
-    parseCSV(file) {
+    // CSV Processing
+    async parseCSV(file) {
         return new Promise((resolve, reject) => {
+            if (!file) {
+                return reject(new Error("No file provided for parsing."));
+            }
             const reader = new FileReader();
             
             reader.onload = (e) => {
                 try {
                     const csvData = e.target.result;
                     const result = this.parseCSVData(csvData);
-                    
-                    if (result.errors && result.errors.length > 0) {
-                        this.log('CSV parsing warnings', 'warn', result.errors);
-                    }
-                    
-                    resolve(result.data);
+                    resolve(result);
                 } catch (error) {
                     reject(new Error(`CSV parsing failed: ${error.message}`));
                 }
             };
             
-            reader.onerror = () => {
-                reject(new Error('Failed to read CSV file'));
-            };
-            
+            reader.onerror = () => reject(new Error('Failed to read CSV file.'));
             reader.readAsText(file);
         });
     }
 
-    // Simple CSV parser
     parseCSVData(csvText) {
         const lines = csvText.split('\n').filter(line => line.trim() !== '');
         const errors = [];
@@ -414,14 +375,13 @@ class Utils {
         const errorMessage = error.message || 'An unknown error occurred.';
         this.log(`Error in ${context}: ${errorMessage}`, 'error', { error: error.toString(), stack: error.stack });
 
-        // Hide any active spinners or progress bars
         this.hideSpinner();
         
-        if (typeof hideImportProgress === 'function') {
-            hideImportProgress();
+        if (window.mainPage && typeof window.mainPage.hideImportProgress === 'function') {
+            window.mainPage.hideImportProgress();
         }
 
-        if (errorMessage.includes('Please configure your PingOne credentials')) {
+        if (errorMessage.includes('configure your PingOne credentials')) {
             this.showModal(
                 'Credentials Required',
                 'You need to configure your PingOne credentials before performing this action.',
@@ -500,26 +460,19 @@ class Utils {
         if (userActionsToggle) {
             userActionsToggle.addEventListener('click', (e) => {
                 e.preventDefault();
-                
-                const submenu = userActionsToggle.nextElementSibling;
-                const arrow = userActionsToggle.querySelector('.nav-arrow');
-
-                userActionsToggle.classList.toggle('open');
-                
-                if (submenu.classList.contains('show')) {
-                    submenu.classList.remove('show');
-                    if (arrow) arrow.textContent = '▼';
-                } else {
-                    submenu.classList.add('show');
-                    if (arrow) arrow.textContent = '▲';
-                }
+                const dropdown = userActionsToggle.closest('.nav-dropdown');
+                const submenu = dropdown.querySelector('.nav-submenu');
+                dropdown.classList.toggle('open');
+                submenu.classList.toggle('show');
             });
         }
     }
 }
 
 // Initialize utilities globally
-window.utils = new Utils();
+document.addEventListener('DOMContentLoaded', () => {
+    window.utils = new Utils();
+});
 
 // Export for module usage
 if (typeof module !== 'undefined' && module.exports) {

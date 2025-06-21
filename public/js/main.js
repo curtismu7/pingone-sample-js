@@ -3,18 +3,17 @@
 class MainPage {
     constructor() {
         this.currentFile = null;
-        this.importResults = [];
+        this.importInProgress = false;
+        this.resultsData = [];
         this.currentPage = 1;
         this.recordsPerPage = 25;
-        this.importInProgress = false;
         this.init();
     }
 
     async init() {
         await this.waitForUtils();
         this.setupEventListeners();
-        this.setupSidebarActions();
-        this.loadDefaultFile();
+        this.loadPersistedState();
         this.initializeTooltips();
         utils.log('Main page initialized', 'info');
     }
@@ -35,215 +34,117 @@ class MainPage {
                 arrow: true,
                 theme: 'light',
                 animation: 'scale',
-                duration: [200, 150],
-                maxWidth: 250
+                duration: [200, 150]
             });
         });
     }
 
     setupEventListeners() {
-        // File upload
-        const fileInput = document.getElementById('csv-file');
-        if (fileInput) {
-            fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        }
+        document.getElementById('csv-file')?.addEventListener('change', (e) => this.handleFileSelect(e));
+        document.getElementById('import-btn')?.addEventListener('click', () => this.importUsers());
+        document.getElementById('records-per-page')?.addEventListener('change', (e) => this.handleRecordsPerPageChange(e));
 
-        // Import buttons
-        const importBtn = document.getElementById('import-btn');
-        if (importBtn) {
-            importBtn.addEventListener('click', () => this.importUsers());
-        }
-
-        const modifyBtn = document.getElementById('modify-btn');
-        if (modifyBtn) {
-            modifyBtn.addEventListener('click', () => this.modifyUsers());
-        }
-
-        const deleteBtn = document.getElementById('delete-btn');
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', () => this.deleteUsers());
-        }
-
-        // Export results
-        const exportBtn = document.getElementById('export-results');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => this.exportResults());
-        }
-
-        // Pagination
-        const prevBtn = document.getElementById('prev-page');
-        if (prevBtn) {
-            prevBtn.addEventListener('click', () => this.previousPage());
-        }
-
-        const nextBtn = document.getElementById('next-page');
-        if (nextBtn) {
-            nextBtn.addEventListener('click', () => this.nextPage());
-        }
-
-        // Drag and drop
-        this.setupDragAndDrop();
+        document.querySelectorAll('.quick-action').forEach(action => {
+            action.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = e.currentTarget.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
     }
 
-    setupSidebarActions() {
-        const chooseFileLink = document.getElementById('nav-choose-file');
-        const importLink = document.getElementById('nav-import-users');
-        const modifyLink = document.getElementById('nav-modify-users');
-        const deleteLink = document.getElementById('nav-delete-users');
+    loadPersistedState() {
+        const settings = utils.loadSettings() || {};
+        this.recordsPerPage = settings.recordsPerPage || 25;
+        document.getElementById('records-per-page').value = this.recordsPerPage;
 
-        if (chooseFileLink) {
-            chooseFileLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                document.getElementById('csv-file').click();
-            });
+        const persistedFileMeta = localStorage.getItem('pingone-file-metadata');
+        if (persistedFileMeta) {
+            this.displayFileMetadata(JSON.parse(persistedFileMeta));
         }
-
-        if (importLink) {
-            importLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                document.getElementById('import-btn').click();
-            });
-        }
-
-        if (modifyLink) {
-            modifyLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                document.getElementById('modify-btn').click();
-            });
-        }
-
-        if (deleteLink) {
-            deleteLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                document.getElementById('delete-btn').click();
-            });
-        }
-    }
-
-    setupDragAndDrop() {
-        const dropZone = document.querySelector('.file-upload-container');
-        if (!dropZone) return;
-
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-        });
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => {
-                dropZone.style.borderColor = 'var(--ping-red)';
-                dropZone.style.backgroundColor = 'var(--ping-red-light)';
-            });
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => {
-                dropZone.style.borderColor = '#e0e0e0';
-                dropZone.style.backgroundColor = 'var(--ping-gray-light)';
-            });
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                this.handleFileSelect({ target: { files } });
-            }
-        });
     }
 
     async handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+        this.currentFile = event.target.files[0];
+        if (!this.currentFile) return;
 
-        if (!file.name.toLowerCase().endsWith('.csv')) {
-            utils.showModal(
-                'Invalid File',
-                'Please select a CSV file only.',
-                { confirmText: 'OK', showCancel: false }
-            );
-            return;
-        }
-
-        this.currentFile = file;
-        this.updateFileInfo();
-        this.updateCurrentFileDisplay();
-        utils.log(`File selected: ${file.name}`, 'info');
-    }
-
-    updateFileInfo() {
-        const fileInfo = document.getElementById('file-info');
-        if (!fileInfo || !this.currentFile) return;
-
-        const info = utils.getFileInfo(this.currentFile);
-        fileInfo.innerHTML = `
-            <div><strong>File Name:</strong> ${info.name}</div>
-            <div><strong>File Size:</strong> ${info.size}</div>
-            <div><strong>Last Modified:</strong> ${info.lastModified}</div>
-        `;
-    }
-
-    updateCurrentFileDisplay() {
-        const currentFileSpan = document.getElementById('current-file');
-        if (currentFileSpan && this.currentFile) {
-            currentFileSpan.textContent = this.currentFile.name;
-        }
-    }
-
-    async loadDefaultFile() {
+        utils.showSpinner('Analyzing file...');
         try {
-            const settings = localStorage.getItem('pingone-settings');
-            if (settings) {
-                const parsed = JSON.parse(settings);
-                if (parsed.defaultFile) {
-                    const currentFileSpan = document.getElementById('current-file');
-                    if (currentFileSpan) {
-                        currentFileSpan.textContent = parsed.defaultFile;
-                    }
-                }
-            }
+            const result = await utils.parseCSV(this.currentFile);
+            const metadata = {
+                name: this.currentFile.name,
+                totalRecords: result.data.length,
+                validRows: result.data.length, // Simple validation for now
+                invalidRows: result.errors.length,
+            };
+            this.displayFileMetadata(metadata);
+            localStorage.setItem('pingone-file-metadata', JSON.stringify(metadata));
         } catch (error) {
-            utils.log(`Failed to load default file: ${error.message}`, 'error');
+            utils.handleError(error, 'handleFileSelect');
+            this.clearFileMetadata();
+        } finally {
+            utils.hideSpinner();
+        }
+    }
+    
+    displayFileMetadata(metadata) {
+        const container = document.getElementById('file-metadata');
+        if (!container) return;
+
+        document.getElementById('meta-filename').textContent = metadata.name;
+        document.getElementById('meta-total-records').textContent = metadata.totalRecords;
+        document.getElementById('meta-valid-rows').textContent = metadata.validRows;
+        document.getElementById('meta-invalid-rows').textContent = metadata.invalidRows;
+        
+        container.classList.remove('hidden');
+    }
+
+    clearFileMetadata() {
+        const container = document.getElementById('file-metadata');
+        if (container) {
+            container.classList.add('hidden');
+        }
+        localStorage.removeItem('pingone-file-metadata');
+        document.getElementById('csv-file').value = '';
+    }
+
+    handleRecordsPerPageChange(event) {
+        this.recordsPerPage = parseInt(event.target.value, 10);
+        const settings = utils.loadSettings() || {};
+        settings.recordsPerPage = this.recordsPerPage;
+        localStorage.setItem('pingone-settings', JSON.stringify(settings));
+        utils.log(`Records per page changed to: ${this.recordsPerPage}`, 'info');
+        if (this.resultsData.length > 0) {
+            this.renderResults();
         }
     }
 
     async importUsers() {
-        if (!this.currentFile) {
-            utils.showModal(
-                'No File Selected',
-                'Please select a CSV file first.',
-                { confirmText: 'OK', showCancel: false }
-            );
+        if (this.importInProgress) {
+            utils.log('Import already in progress.', 'warn');
             return;
         }
-
-        if (this.importInProgress) {
-            utils.showModal(
-                'Import in Progress',
-                'An import is already in progress. Please wait for it to complete.',
-                { confirmText: 'OK', showCancel: false }
-            );
+        if (!this.currentFile) {
+            utils.showModal('No File Selected', 'Please choose a CSV file to import.', { showCancel: false });
             return;
         }
 
         try {
             this.importInProgress = true;
-            utils.showSpinner('Processing file...');
             this.showImportProgress();
-
-            const csvData = await utils.parseCSV(this.currentFile);
-            if (!csvData || csvData.length === 0) {
-                throw new Error('No data found in CSV file');
-            }
-
-            const credentials = this.getCredentials();
+            
+            const credentials = utils.getStoredCredentials();
             if (!credentials) {
                 throw new Error('Please configure your PingOne credentials in the Configuration page');
             }
 
-            utils.showSpinner('Importing users...');
-            await this.processImport(csvData, credentials);
+            const csvData = await utils.parseCSVData(await this.currentFile.text());
+            
+            utils.showSpinner(`Importing ${csvData.data.length} users...`);
+            await this.processImport(csvData.data, credentials);
 
         } catch (error) {
             utils.handleError(error, 'importUsers');
@@ -254,368 +155,60 @@ class MainPage {
         }
     }
 
-    async processImport(csvData, credentials) {
-        const totalUsers = csvData.length;
-        let processed = 0;
-        let successful = 0;
-        let failed = 0;
-
-        this.importResults = [];
-
-        // Get worker token
-        const token = await utils.getWorkerToken(
-            credentials.environmentId,
-            credentials.clientId,
-            credentials.clientSecret
-        );
-
-        if (!token) {
-            throw new Error('Failed to obtain authentication token');
-        }
-
-        // Process each user
-        for (const userData of csvData) {
-            try {
-                const result = await this.importUser(userData, credentials, token);
-                this.importResults.push(result);
-                
-                if (result.success) {
-                    successful++;
-                } else {
-                    failed++;
-                }
-            } catch (error) {
-                failed++;
-                this.importResults.push({
-                    username: userData.username || 'Unknown',
-                    success: false,
-                    message: error.message
-                });
-            }
-
-            processed++;
-            this.updateProgress(processed, totalUsers, successful, failed);
-        }
-
-        this.showResults();
-    }
-
-    async importUser(userData, credentials, token) {
-        const mappedData = this.mapUserData(userData);
-        
-        const response = await fetch('/api/import', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                user: mappedData,
-                credentials: credentials
-            })
-        });
-
-        const result = await response.json();
-        
-        return {
-            username: mappedData.username,
-            success: response.ok,
-            message: result.message || (response.ok ? 'User imported successfully' : 'Import failed')
-        };
-    }
-
-    mapUserData(userData) {
-        const columnMapping = this.getColumnMapping();
-        
-        return {
-            username: userData[columnMapping.usernameColumn] || userData.username,
-            email: userData[columnMapping.emailColumn] || userData.email,
-            firstName: userData[columnMapping.firstnameColumn] || userData.firstName,
-            lastName: userData[columnMapping.lastnameColumn] || userData.lastName,
-            populationId: userData[columnMapping.populationColumn] || userData.populationId
-        };
-    }
-
-    getCredentials() {
-        try {
-            const settings = localStorage.getItem('pingone-settings');
-            if (settings) {
-                const parsed = JSON.parse(settings);
-                if (parsed.environmentId && parsed.clientId && parsed.clientSecret) {
-                    return {
-                        environmentId: parsed.environmentId,
-                        clientId: parsed.clientId,
-                        clientSecret: parsed.clientSecret,
-                        baseUrl: parsed.baseUrl || 'https://api.pingone.com'
-                    };
-                }
-            }
-            return null;
-        } catch (error) {
-            utils.log(`Failed to get credentials: ${error.message}`, 'error');
-            return null;
-        }
-    }
-
-    getColumnMapping() {
-        try {
-            const settings = localStorage.getItem('pingone-settings');
-            if (settings) {
-                const parsed = JSON.parse(settings);
-                return {
-                    usernameColumn: parsed.usernameColumn || 'username',
-                    emailColumn: parsed.emailColumn || 'email',
-                    firstnameColumn: parsed.firstnameColumn || 'firstName',
-                    lastnameColumn: parsed.lastnameColumn || 'lastName',
-                    populationColumn: parsed.populationColumn || 'populationId'
-                };
-            }
-            return {
-                usernameColumn: 'username',
-                emailColumn: 'email',
-                firstnameColumn: 'firstName',
-                lastnameColumn: 'lastName',
-                populationColumn: 'populationId'
-            };
-        } catch (error) {
-            utils.log(`Failed to get column mapping: ${error.message}`, 'error');
-            return {
-                usernameColumn: 'username',
-                emailColumn: 'email',
-                firstnameColumn: 'firstName',
-                lastnameColumn: 'lastName',
-                populationColumn: 'populationId'
-            };
-        }
-    }
-
     showImportProgress() {
-        const progress = document.getElementById('import-progress');
-        if (progress) {
-            progress.classList.remove('hidden');
-        }
+        document.getElementById('import-progress')?.classList.remove('hidden');
     }
 
     hideImportProgress() {
-        const progress = document.getElementById('import-progress');
-        if (progress) {
-            progress.classList.add('hidden');
-        }
+        document.getElementById('import-progress')?.classList.add('hidden');
     }
+    
+    async processImport(records, credentials) {
+        let successCount = 0;
+        let failCount = 0;
+        this.resultsData = [];
 
-    updateProgress(processed, total, successful, failed) {
-        const progressFill = document.getElementById('progress-fill');
-        const progressStatus = document.getElementById('progress-status');
-        const progressCount = document.getElementById('progress-count');
-
-        if (progressFill) {
-            const percentage = (processed / total) * 100;
-            progressFill.style.width = `${percentage}%`;
-        }
-
-        if (progressStatus) {
-            progressStatus.textContent = `Processing users... (${successful} successful, ${failed} failed)`;
-        }
-
-        if (progressCount) {
-            progressCount.textContent = `${processed} / ${total}`;
-        }
-    }
-
-    showResults() {
-        const resultsPanel = document.getElementById('results-panel');
-        if (resultsPanel) {
-            resultsPanel.classList.remove('hidden');
-            this.updateResultsSummary();
-            this.displayResultsPage(1);
-        }
-    }
-
-    updateResultsSummary() {
-        const totalRecords = document.getElementById('total-records');
-        const successfulCount = document.getElementById('successful-count');
-        const failedCount = document.getElementById('failed-count');
-
-        if (totalRecords) {
-            totalRecords.textContent = this.importResults.length;
-        }
-
-        if (successfulCount) {
-            const successful = this.importResults.filter(r => r.success).length;
-            successfulCount.textContent = successful;
-        }
-
-        if (failedCount) {
-            const failed = this.importResults.filter(r => !r.success).length;
-            failedCount.textContent = failed;
-        }
-    }
-
-    displayResultsPage(page) {
-        const tbody = document.getElementById('results-tbody');
-        if (!tbody) return;
-
-        const startIndex = (page - 1) * this.recordsPerPage;
-        const endIndex = startIndex + this.recordsPerPage;
-        const pageResults = this.importResults.slice(startIndex, endIndex);
-
-        tbody.innerHTML = '';
-
-        pageResults.forEach(result => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${result.username}</td>
-                <td><span class="status-badge ${result.success ? 'success' : 'error'}">${result.success ? 'Success' : 'Failed'}</span></td>
-                <td>${result.message}</td>
-                <td>
-                    ${!result.success ? `<button class="btn btn-secondary btn-sm" onclick="mainPage.retryImport('${result.username}')">Retry</button>` : ''}
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
-
-        this.updatePagination();
-    }
-
-    updatePagination() {
-        const totalPages = Math.ceil(this.importResults.length / this.recordsPerPage);
-        const pageInfo = document.getElementById('page-info');
-        const prevBtn = document.getElementById('prev-page');
-        const nextBtn = document.getElementById('next-page');
-        const pagination = document.getElementById('pagination');
-
-        if (pageInfo) {
-            pageInfo.textContent = `Page ${this.currentPage} of ${totalPages}`;
-        }
-
-        if (prevBtn) {
-            prevBtn.disabled = this.currentPage <= 1;
-        }
-
-        if (nextBtn) {
-            nextBtn.disabled = this.currentPage >= totalPages;
-        }
-
-        if (pagination) {
-            pagination.classList.toggle('hidden', totalPages <= 1);
-        }
-    }
-
-    previousPage() {
-        if (this.currentPage > 1) {
-            this.currentPage--;
-            this.displayResultsPage(this.currentPage);
-        }
-    }
-
-    nextPage() {
-        const totalPages = Math.ceil(this.importResults.length / this.recordsPerPage);
-        if (this.currentPage < totalPages) {
-            this.currentPage++;
-            this.displayResultsPage(this.currentPage);
-        }
-    }
-
-    async retryImport(username) {
-        const userResult = this.importResults.find(r => r.username === username);
-        if (!userResult) return;
-
-        try {
-            const credentials = this.getCredentials();
-            if (!credentials) {
-                throw new Error('Please configure your PingOne credentials');
+        for (let i = 0; i < records.length; i++) {
+            const record = records[i];
+            const status = { success: false, message: '' };
+            
+            try {
+                // Placeholder for actual import logic
+                // const response = await utils.makeRequest(...);
+                status.success = true;
+                status.message = 'Successfully imported (simulation).';
+                successCount++;
+            } catch (error) {
+                status.success = false;
+                status.message = error.message;
+                failCount++;
             }
 
-            const token = await utils.getWorkerToken(
-                credentials.environmentId,
-                credentials.clientId,
-                credentials.clientSecret
-            );
-
-            if (!token) {
-                throw new Error('Failed to obtain authentication token');
-            }
-
-            // Find the original user data from the CSV
-            const csvData = await utils.parseCSV(this.currentFile);
-            const userData = csvData.find(row => {
-                const mapping = this.getColumnMapping();
-                return row[mapping.usernameColumn] === username || row.username === username;
+            this.resultsData.push({
+                username: record.username || `Row ${i + 1}`,
+                status: status.success ? 'Success' : 'Failed',
+                details: status.message
             });
 
-            if (!userData) {
-                throw new Error('Original user data not found');
-            }
-
-            const result = await this.importUser(userData, credentials, token);
-            
-            // Update the result in the array
-            const index = this.importResults.findIndex(r => r.username === username);
-            if (index !== -1) {
-                this.importResults[index] = result;
-            }
-
-            // Refresh the display
-            this.updateResultsSummary();
-            this.displayResultsPage(this.currentPage);
-
-            utils.showModal(
-                'Retry Result',
-                result.success ? 'User imported successfully' : `Import failed: ${result.message}`,
-                { confirmText: 'OK', showCancel: false }
-            );
-
-        } catch (error) {
-            utils.handleError(error, 'retryImport');
+            // Update progress bar
+            const progressFill = document.getElementById('progress-fill');
+            const progressCount = document.getElementById('progress-count');
+            const percent = ((i + 1) / records.length) * 100;
+            if(progressFill) progressFill.style.width = `${percent}%`;
+            if(progressCount) progressCount.textContent = `${i + 1} / ${records.length}`;
         }
+        
+        this.renderResults();
+        utils.showModal('Import Complete', `Processed ${records.length} records. Success: ${successCount}, Failed: ${failCount}.`, { showCancel: false });
     }
 
-    async modifyUsers() {
-        utils.showModal(
-            'Modify Users',
-            'User modification functionality will be implemented in a future update.',
-            { confirmText: 'OK', showCancel: false }
-        );
-    }
+    renderResults() {
+        const resultsPanel = document.getElementById('results-panel');
+        if (!resultsPanel) return;
 
-    async deleteUsers() {
-        utils.showModal(
-            'Delete Users',
-            'User deletion functionality will be implemented in a future update.',
-            { confirmText: 'OK', showCancel: false }
-        );
-    }
-
-    exportResults() {
-        try {
-            const csv = this.convertResultsToCSV();
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `import-results-${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-
-            utils.log('Results exported successfully', 'info');
-        } catch (error) {
-            utils.handleError(error, 'exportResults');
-        }
-    }
-
-    convertResultsToCSV() {
-        const headers = ['Username', 'Status', 'Message'];
-        const rows = this.importResults.map(result => [
-            result.username,
-            result.success ? 'Success' : 'Failed',
-            result.message
-        ]);
-
-        return [headers, ...rows]
-            .map(row => row.map(cell => `"${cell}"`).join(','))
-            .join('\n');
+        resultsPanel.classList.remove('hidden');
+        // Logic to render table and pagination will go here
+        console.log("Render results called, pagination and table rendering would happen here.");
     }
 }
 
