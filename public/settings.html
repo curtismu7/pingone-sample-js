@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ping Identity - Configuration</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" type="image/png" href="images/logo.png">
 </head>
@@ -28,27 +29,26 @@
         <ul class="nav-menu">
             <li class="nav-item">
                 <a href="index.html" class="nav-link">
-                    <span class="nav-icon">👥</span>
+                    <i class="fas fa-users nav-icon"></i>
                     <span>User Management</span>
                 </a>
             </li>
             <li class="nav-item nav-dropdown">
                 <a href="#" class="nav-link" id="user-actions-toggle">
-                    <span class="nav-icon">⚡</span>
+                    <i class="fas fa-bolt nav-icon"></i>
                     <span>Quick Actions</span>
-                    <span class="nav-arrow">▼</span>
+                    <i class="fas fa-chevron-right nav-arrow"></i>
                 </a>
                 <ul class="nav-submenu hidden">
-                    <li><a href="#" class="nav-submenu-link disabled"><span class="nav-icon">📁</span> <span>Choose File</span></a></li>
-                    <li><a href="#" class="nav-submenu-link disabled"><span class="nav-icon">⬆️</span> <span>Import Users</span></a></li>
-                    <li><a href="#" class="nav-submenu-link disabled"><span class="nav-icon">✏️</span> <span>Modify Users</span></a></li>
-                    <li><a href="#" class="nav-submenu-link disabled"><span class="nav-icon">🗑️</span> <span>Delete Users</span></a></li>
+                    <li><a href="index.html#import" class="nav-submenu-link"><i class="fas fa-upload nav-icon"></i> <span>Import Users</span></a></li>
+                    <li><a href="index.html#modify" class="nav-submenu-link disabled"><i class="fas fa-pencil-alt nav-icon"></i> <span>Modify Users</span></a></li>
+                    <li><a href="index.html#delete" class="nav-submenu-link disabled"><i class="fas fa-trash-alt nav-icon"></i> <span>Delete Users</span></a></li>
                 </ul>
             </li>
         </ul>
         <div class="sidebar-footer">
             <a href="settings.html" class="nav-link active">
-                <span class="nav-icon">⚙️</span>
+                <i class="fas fa-cog nav-icon"></i>
                 <span>Configuration</span>
             </a>
         </div>
@@ -56,95 +56,81 @@
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Default File Display -->
-        <div id="default-file-display" class="default-file-display hidden">
-            <span class="default-file-label">Default File:</span>
-            <span id="default-file-name" class="default-file-name"></span>
-        </div>
+        <h1>Configuration</h1>
 
-        <!-- Environment Settings Group -->
-        <section class="config-group">
+        <!-- Authentication Configuration Group -->
+        <section class="config-group" id="auth-config">
             <div class="group-header">
-                <h2>Environment Settings</h2>
+                <h2>Authentication Configuration</h2>
             </div>
             <div class="group-content">
-                <form id="credentials-form" class="form">
+                <form id="credentials-form" class="form compact-form">
                     <div class="form-group">
                         <label for="environment-id">Environment ID</label>
-                        <input type="text" id="environment-id" name="environmentId" required 
-                               data-tippy-content="Your PingOne environment identifier">
+                        <input type="text" id="environment-id" name="environmentId" class="input-30char" required 
+                               data-tippy-content="Your PingOne environment identifier.">
                     </div>
                     
                     <div class="form-group">
                         <label for="client-id">Client ID</label>
-                        <input type="text" id="client-id" name="clientId" required
-                               data-tippy-content="Your PingOne application client identifier">
+                        <input type="text" id="client-id" name="clientId" class="input-30char" required
+                               data-tippy-content="Your PingOne application's client identifier.">
                     </div>
                     
-                    <div class="form-group">
+                    <div class="form-group client-secret-group">
                         <label for="client-secret">Client Secret</label>
-                        <input type="password" id="client-secret" name="clientSecret" required
-                               data-tippy-content="Your PingOne application client secret">
+                        <div class="input-with-icon">
+                            <input type="password" id="client-secret" name="clientSecret" class="input-30char"
+                                   data-tippy-content="Your PingOne application's client secret. Omit if not required.">
+                            <i class="fas fa-eye" id="toggle-secret"></i>
+                        </div>
                     </div>
                     
                     <div class="form-group">
                         <label for="base-url">Base URL</label>
-                        <input type="url" id="base-url" name="baseUrl" value="https://api.pingone.com" required
-                               data-tippy-content="PingOne API base URL">
+                        <input type="url" id="base-url" name="baseUrl" value="https://api.pingone.com" class="input-30char" required
+                               data-tippy-content="The base URL for the PingOne API for your region.">
+                    </div>
+                    
+                    <div class="form-group form-row">
+                        <label class="checkbox-label" data-tippy-content="Check this if your PingOne application requires a client secret for authentication.">
+                            <input type="checkbox" id="use-client-secret" name="useClientSecret" checked>
+                            <span>Use Client Secret</span>
+                        </label>
+                        <label class="checkbox-label" data-tippy-content="Check this to save your credentials securely in the browser's local storage for future sessions.">
+                            <input type="checkbox" id="save-credentials" name="saveCredentials">
+                            <span>Save Credentials</span>
+                        </label>
+                    </div>
+
+                    <div class="action-buttons centered">
+                        <button type="button" id="test-credentials" class="btn btn-danger">
+                            Test Credentials
+                        </button>
+                        <div id="token-status" class="token-status"></div>
                     </div>
                 </form>
             </div>
         </section>
 
-        <!-- Authentication Options Group -->
+        <!-- Application Settings Group -->
         <section class="config-group">
             <div class="group-header">
-                <h2>Authentication Options</h2>
+                <h2>Application Settings</h2>
             </div>
             <div class="group-content">
-                <div class="form-group checkbox-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="save-credentials" name="saveCredentials">
-                        <span>Save Credentials</span>
-                    </label>
-                    <div class="checkbox-help">Store credentials in browser for future sessions</div>
-                </div>
-                
-                <div class="form-group checkbox-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="use-client-secret" name="useClientSecret" checked>
-                        <span>Use Client Secret</span>
-                    </label>
-                    <div class="checkbox-help">Include client secret in authentication requests</div>
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" id="test-credentials" class="btn btn-secondary">
-                        Test Credentials
-                    </button>
-                    <div id="token-status" class="token-status"></div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Import Controls Group -->
-        <section class="config-group">
-            <div class="group-header">
-                <h2>Import Controls</h2>
-            </div>
-            <div class="group-content">
-                <form id="app-settings-form" class="form">
+                <form id="app-settings-form" class="form compact-form">
                     <div class="form-group">
                         <label for="default-file">Default CSV File</label>
-                        <input type="file" id="default-file" name="defaultFile" accept=".csv"
-                               data-tippy-content="Select a CSV file to use as default for imports">
+                        <input type="file" id="default-file" name="defaultFile" accept=".csv" class="input-50char"
+                               data-tippy-content="Select a CSV file to automatically load for import operations.">
                         <div id="current-default-file" class="current-file-info"></div>
                     </div>
                     
                     <div class="form-group">
                         <label for="records-per-page">Records per Page</label>
-                        <select id="records-per-page" name="recordsPerPage"
-                                data-tippy-content="Number of records to display per page in results">
+                        <select id="records-per-page" name="recordsPerPage" class="input-3char"
+                                data-tippy-content="Number of records to display per page in the results table.">
                             <option value="10">10</option>
                             <option value="25" selected>25</option>
                             <option value="50">50</option>
@@ -154,116 +140,14 @@
                 </form>
             </div>
         </section>
+        
+        <!-- Save Configuration Action -->
+        <div class="action-buttons">
+            <button type="button" id="save-all-settings" class="btn btn-danger">
+                Save Configuration
+            </button>
+        </div>
 
-        <!-- Column Mapping Group -->
-        <section class="config-group">
-            <div class="group-header">
-                <h2>Column Mapping</h2>
-            </div>
-            <div class="group-content">
-                <div class="column-mapping-container">
-                    <div class="mapping-row">
-                        <div class="mapping-label">
-                            <label>Username</label>
-                        </div>
-                        <div class="mapping-input">
-                            <select id="username-column" class="column-select"
-                                    data-tippy-content="Select the CSV column containing usernames">
-                                <option value="">Select column...</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="mapping-row">
-                        <div class="mapping-label">
-                            <label>Email</label>
-                        </div>
-                        <div class="mapping-input">
-                            <select id="email-column" class="column-select"
-                                    data-tippy-content="Select the CSV column containing email addresses">
-                                <option value="">Select column...</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="mapping-row">
-                        <div class="mapping-label">
-                            <label>First Name</label>
-                        </div>
-                        <div class="mapping-input">
-                            <select id="firstname-column" class="column-select"
-                                    data-tippy-content="Select the CSV column containing first names">
-                                <option value="">Select column...</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="mapping-row">
-                        <div class="mapping-label">
-                            <label>Last Name</label>
-                        </div>
-                        <div class="mapping-input">
-                            <select id="lastname-column" class="column-select"
-                                    data-tippy-content="Select the CSV column containing last names">
-                                <option value="">Select column...</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="mapping-row">
-                        <div class="mapping-label">
-                            <label>Population ID</label>
-                        </div>
-                        <div class="mapping-input">
-                            <select id="population-column" class="column-select"
-                                    data-tippy-content="Select the CSV column containing population identifiers">
-                                <option value="">Select column...</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- User Display Options Group -->
-        <section class="config-group">
-            <div class="group-header">
-                <h2>User Display Options</h2>
-            </div>
-            <div class="group-content">
-                <div class="form-group">
-                    <label for="language">Language</label>
-                    <select id="language" name="language"
-                            data-tippy-content="Select your preferred language for the interface">
-                        <option value="en">English</option>
-                        <option value="es">Español</option>
-                        <option value="fr">Français</option>
-                        <option value="pt">Português</option>
-                        <option value="zh">中文</option>
-                    </select>
-                </div>
-            </div>
-        </section>
-
-        <!-- Actions Group -->
-        <section class="config-group">
-            <div class="group-header">
-                <h2>Configuration Actions</h2>
-            </div>
-            <div class="group-content">
-                <div class="action-buttons">
-                    <button id="save-settings" class="btn btn-primary">
-                        Save Configuration
-                    </button>
-                    <button id="delete-settings" class="btn btn-danger">
-                        Delete Configuration
-                    </button>
-                    <button id="reset-settings" class="btn btn-secondary">
-                        Reset to Defaults
-                    </button>
-                </div>
-            </div>
-        </section>
     </main>
 
     <!-- Footer -->
@@ -297,8 +181,8 @@
     </div>
 
     <!-- Scripts -->
-    <script src="https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js"></script>
-    <script src="https://unpkg.com/tippy.js@6/dist/tippy-bundle.umd.js"></script>
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/tippy.js@6"></script>
     <script src="js/utils.js"></script>
     <script src="js/settings.js"></script>
 </body>
