@@ -42,18 +42,14 @@ class SettingsPage {
         const defaultFileDisplay = document.getElementById('default-file-display');
         const defaultFileName = document.getElementById('default-file-name');
         
-        if (this.currentFile) {
-            defaultFileName.textContent = this.currentFile.name;
+        const settings = this.getCurrentSettings();
+        const fileName = this.currentFile ? this.currentFile.name : settings.defaultFile;
+
+        if (fileName) {
+            defaultFileName.textContent = fileName;
             defaultFileDisplay.classList.remove('hidden');
         } else {
-            // Check if there's a saved default file
-            const settings = this.getCurrentSettings();
-            if (settings.defaultFile) {
-                defaultFileName.textContent = settings.defaultFile;
-                defaultFileDisplay.classList.remove('hidden');
-            } else {
-                defaultFileDisplay.classList.add('hidden');
-            }
+            defaultFileDisplay.classList.add('hidden');
         }
     }
 
@@ -152,9 +148,6 @@ class SettingsPage {
         }
 
         // App settings
-        if (settings.language) {
-            document.getElementById('language').value = settings.language;
-        }
         if (settings.recordsPerPage) {
             document.getElementById('records-per-page').value = settings.recordsPerPage;
         }
@@ -231,8 +224,7 @@ class SettingsPage {
             const credentials = {
                 environmentId: formData.get('environmentId'),
                 clientId: formData.get('clientId'),
-                clientSecret: formData.get('clientSecret'),
-                baseUrl: formData.get('baseUrl') || 'https://api.pingone.com'
+                clientSecret: formData.get('clientSecret')
             };
 
             if (!credentials.environmentId || !credentials.clientId || !credentials.clientSecret) {
@@ -242,23 +234,11 @@ class SettingsPage {
             utils.showSpinner('Testing credentials...');
             this.updateTokenStatus('loading', 'Testing credentials...');
 
-            // Test by getting a worker token
-            const token = await utils.getWorkerToken(
-                credentials.environmentId,
-                credentials.clientId,
-                credentials.clientSecret
-            );
-
-            if (token) {
-                this.updateTokenStatus('valid', 'Credentials are valid');
-                utils.log('Credentials test successful', 'info');
-            } else {
-                throw new Error('Failed to obtain token');
-            }
-
+            await utils.getWorkerToken(credentials.environmentId, credentials.clientId, credentials.clientSecret);
+            this.updateTokenStatus('valid', 'Credentials are valid');
         } catch (error) {
-            this.updateTokenStatus('expired', 'Credentials are invalid');
-            utils.log(`Credentials test failed: ${error.message}`, 'error');
+            this.updateTokenStatus('expired', `Failed to get token: ${error.message}`);
+            utils.handleError(error, 'testCredentials');
         } finally {
             utils.hideSpinner();
         }
@@ -266,67 +246,59 @@ class SettingsPage {
 
     updateTokenStatus(status, message) {
         const tokenStatus = document.getElementById('token-status');
-        if (tokenStatus) {
-            tokenStatus.className = `token-status ${status}`;
-            tokenStatus.textContent = message;
-        }
+        if (!tokenStatus) return;
+
+        tokenStatus.className = `token-status ${status}`;
+        tokenStatus.textContent = message;
     }
 
     startTokenStatusCheck() {
-        // Check token status every 30 seconds
-        setInterval(() => {
-            this.checkTokenStatus();
-        }, 30000);
-
-        // Initial check
         this.checkTokenStatus();
+        setInterval(() => this.checkTokenStatus(), 60000); // Check every minute
     }
 
     async checkTokenStatus() {
         const tokenStatus = utils.getTokenStatus();
-        if (tokenStatus === 'expired') {
-            this.updateTokenStatus('expired', 'Token expired - please test credentials');
-        } else if (tokenStatus === 'valid') {
-            this.updateTokenStatus('valid', 'Token is valid');
+        if (tokenStatus.valid) {
+            const minutes = Math.round(tokenStatus.timeRemaining / 60000);
+            this.updateTokenStatus('valid', `Token valid (${minutes} minutes remaining)`);
+        } else {
+            this.updateTokenStatus('expired', 'Token expired or not set');
         }
     }
 
     async handleDefaultFileSelect(event) {
         const file = event.target.files[0];
-        if (file) {
-            this.currentFile = file;
-            this.updateCurrentDefaultFile(file.name);
-            this.updateDefaultFileDisplay();
-            
-            // Parse CSV to populate column mapping
-            try {
-                const text = await file.text();
-                const headers = this.parseCSVHeaders(text);
-                this.populateColumnMapping(headers);
-            } catch (error) {
-                utils.log(`Failed to parse CSV file: ${error.message}`, 'error');
-            }
+        if (!file) return;
+
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            utils.showModal('Invalid File', 'Please select a valid CSV file.', { confirmText: 'OK', showCancel: false });
+            return;
         }
+        
+        this.currentFile = file;
+        this.updateCurrentDefaultFile(file.name);
+        
+        const csvText = await file.text();
+        const headers = this.parseCSVHeaders(csvText);
+        this.populateColumnMapping(headers);
     }
 
     parseCSVHeaders(csvText) {
-        const lines = csvText.split('\n');
-        if (lines.length > 0) {
-            return lines[0].split(',').map(header => header.trim().replace(/"/g, ''));
-        }
-        return [];
+        const firstLine = csvText.split('\n')[0];
+        return firstLine.split(',').map(h => h.trim());
     }
 
     updateCurrentDefaultFile(filename) {
-        const currentFileInfo = document.getElementById('current-default-file');
-        if (currentFileInfo) {
-            currentFileInfo.textContent = filename;
+        const display = document.getElementById('current-default-file');
+        if (display) {
+            display.textContent = `Current: ${filename}`;
         }
     }
 
     populateColumnMapping(headers) {
-        const columnSelects = document.querySelectorAll('.column-select');
-        columnSelects.forEach(select => {
+        const selects = document.querySelectorAll('.column-select');
+        selects.forEach(select => {
             // Clear existing options except the first one
             while (select.children.length > 1) {
                 select.removeChild(select.lastChild);
@@ -343,23 +315,13 @@ class SettingsPage {
     }
 
     saveColumnMapping() {
-        try {
-            const mapping = {
-                usernameColumn: document.getElementById('username-column').value,
-                emailColumn: document.getElementById('email-column').value,
-                firstnameColumn: document.getElementById('firstname-column').value,
-                lastnameColumn: document.getElementById('lastname-column').value,
-                populationColumn: document.getElementById('population-column').value
-            };
-
-            const currentSettings = this.getCurrentSettings();
-            const updatedSettings = { ...currentSettings, ...mapping };
-            localStorage.setItem('pingone-settings', JSON.stringify(updatedSettings));
-            
-            utils.log('Column mapping saved', 'info');
-        } catch (error) {
-            utils.log(`Failed to save column mapping: ${error.message}`, 'error');
-        }
+        const settings = this.getCurrentSettings();
+        settings.usernameColumn = document.getElementById('username-column').value;
+        settings.emailColumn = document.getElementById('email-column').value;
+        settings.firstnameColumn = document.getElementById('firstname-column').value;
+        settings.lastnameColumn = document.getElementById('lastname-column').value;
+        settings.populationColumn = document.getElementById('population-column').value;
+        localStorage.setItem('pingone-settings', JSON.stringify(settings));
     }
 
     saveAppSettings() {
@@ -381,55 +343,49 @@ class SettingsPage {
         }
     }
 
-    saveAllSettings() {
+    async saveAllSettings() {
         try {
-            // Consolidate all settings from different forms
-            const credentialsData = new FormData(document.getElementById('credentials-form'));
-            const appSettingsData = new FormData(document.getElementById('app-settings-form'));
+            utils.showSpinner('Saving settings...');
 
-            const settings = {
-                // Credentials
-                environmentId: credentialsData.get('environmentId'),
-                clientId: credentialsData.get('clientId'),
-                clientSecret: credentialsData.get('clientSecret'),
-                baseUrl: credentialsData.get('baseUrl'),
-                saveCredentials: credentialsData.get('saveCredentials') === 'on',
-                useClientSecret: credentialsData.get('useClientSecret') === 'on',
+            const credentialsFormData = new FormData(document.getElementById('credentials-form'));
+            const appSettingsFormData = new FormData(document.getElementById('app-settings-form'));
 
-                // App settings
-                language: appSettingsData.get('language'),
-                recordsPerPage: appSettingsData.get('recordsPerPage'),
+            const settings = this.getCurrentSettings();
 
-                // Default file - handle separately
-                defaultFile: this.currentFile ? this.currentFile.name : document.getElementById('current-default-file').textContent,
+            // Handle credential persistence
+            const saveCredentials = document.getElementById('save-credentials').checked;
+            settings.saveCredentials = saveCredentials;
 
-                // Column mapping
-                usernameColumn: document.getElementById('username-column').value,
-                emailColumn: document.getElementById('email-column').value,
-                firstnameColumn: document.getElementById('firstname-column').value,
-                lastnameColumn: document.getElementById('lastname-column').value,
-                populationColumn: document.getElementById('population-column').value
-            };
-
-            const settingsToSave = { ...settings };
-
-            // Save to localStorage
-            if (settingsToSave.saveCredentials) {
-                localStorage.setItem('pingone-settings', JSON.stringify(settingsToSave));
+            if (saveCredentials) {
+                settings.environmentId = credentialsFormData.get('environmentId');
+                settings.clientId = credentialsFormData.get('clientId');
+                settings.clientSecret = credentialsFormData.get('clientSecret');
+                settings.baseUrl = credentialsFormData.get('baseUrl');
             } else {
-                // Don't save credentials if not requested
-                delete settingsToSave.environmentId;
-                delete settingsToSave.clientId;
-                delete settingsToSave.clientSecret;
-                // Also remove the saveCredentials flag so it's not checked on next load
-                delete settingsToSave.saveCredentials; 
-                localStorage.setItem('pingone-settings', JSON.stringify(settingsToSave));
+                delete settings.environmentId;
+                delete settings.clientId;
+                delete settings.clientSecret;
             }
 
+            // Other settings
+            settings.useClientSecret = document.getElementById('use-client-secret').checked;
+            settings.recordsPerPage = appSettingsFormData.get('recordsPerPage');
+            if (this.currentFile) {
+                settings.defaultFile = this.currentFile.name;
+            }
+
+            this.saveColumnMapping();
+            const mappingSettings = this.getCurrentSettings();
+            const finalSettings = { ...settings, ...mappingSettings };
+            
+            localStorage.setItem('pingone-settings', JSON.stringify(finalSettings));
+            
             utils.log('All settings saved', 'info');
+            utils.hideSpinner();
+
             utils.showModal(
-                'Configuration Saved',
-                'Your configuration has been successfully saved.',
+                'Settings Saved',
+                'All your settings have been successfully saved.',
                 { confirmText: 'OK', showCancel: false }
             );
 
@@ -438,45 +394,30 @@ class SettingsPage {
         }
     }
 
-    deleteSettings() {
-        utils.showModal(
-            'Delete Configuration',
-            'Are you sure you want to delete all saved configuration? This action cannot be undone.',
-            {
-                confirmText: 'Delete',
-                cancelText: 'Cancel',
-                onConfirm: () => {
-                    localStorage.removeItem('pingone-settings');
-                    this.resetFormFields();
-                    utils.log('Settings deleted', 'info');
-                    utils.showModal(
-                        'Configuration Deleted',
-                        'All configuration has been deleted.',
-                        { confirmText: 'OK', showCancel: false }
-                    );
-                }
-            }
-        );
+    async deleteSettings() {
+        utils.showModal('Delete Settings', 'Are you sure you want to delete all settings? This action cannot be undone.', {
+            confirmText: 'Delete',
+            onConfirm: () => {
+                localStorage.removeItem('pingone-settings');
+                this.resetFormFields();
+                utils.log('All settings deleted', 'info');
+                utils.showModal('Settings Deleted', 'All settings have been deleted.', { confirmText: 'OK', showCancel: false });
+            },
+            showCancel: true
+        });
     }
 
-    resetSettings() {
-        utils.showModal(
-            'Reset Configuration',
-            'Are you sure you want to reset all settings to their default values?',
-            {
-                confirmText: 'Reset',
-                cancelText: 'Cancel',
-                onConfirm: () => {
-                    this.resetFormFields();
-                    utils.log('Settings reset to defaults', 'info');
-                    utils.showModal(
-                        'Configuration Reset',
-                        'All settings have been reset to their default values.',
-                        { confirmText: 'OK', showCancel: false }
-                    );
-                }
-            }
-        );
+    async resetSettings() {
+        utils.showModal('Reset Settings', 'Are you sure you want to reset all settings to their default values?', {
+            confirmText: 'Reset',
+            onConfirm: () => {
+                localStorage.removeItem('pingone-settings');
+                this.resetFormFields();
+                utils.log('All settings reset', 'info');
+                utils.showModal('Settings Reset', 'All settings have been reset to their default values.', { confirmText: 'OK', showCancel: false });
+            },
+            showCancel: true
+        });
     }
 
     resetFormFields() {
