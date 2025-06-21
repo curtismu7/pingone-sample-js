@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ping Identity - User Management</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" type="image/png" href="images/logo.png">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-container">
+                <img src="images/logo.png" alt="Ping Identity" class="logo">
+                <h1>User Management</h1>
+            </div>
+            <div class="header-actions">
+                <span id="current-file" class="current-file"></span>
+                <div class="language-selector">
+                    <select id="language-select">
+                        <option value="en">English</option>
+                        <option value="es">Español</option>
+                        <option value="fr">Français</option>
+                        <option value="pt">Português</option>
+                        <option value="zh">中文</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="sidebar">
+        <div class="nav-logo">
+            <img src="images/logo.png" alt="Ping Identity" class="nav-logo-img">
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a href="index.html" class="nav-link active">
+                    <span class="nav-icon">👥</span>
+                    <span>User Management</span>
+                </a>
+            </li>
+            <li class="nav-item nav-dropdown">
+                <a href="#" class="nav-link" id="user-actions-toggle">
+                    <span class="nav-icon">⚡</span>
+                    <span>Quick Actions</span>
+                    <span class="nav-arrow">▼</span>
+                </a>
+                <ul class="nav-submenu hidden">
+                    <li><a href="#" id="nav-choose-file" class="nav-submenu-link"><span class="nav-icon">📁</span> <span>Choose File</span></a></li>
+                    <li><a href="#" id="nav-import-users" class="nav-submenu-link"><span class="nav-icon">⬆️</span> <span>Import Users</span></a></li>
+                    <li><a href="#" id="nav-modify-users" class="nav-submenu-link"><span class="nav-icon">✏️</span> <span>Modify Users</span></a></li>
+                    <li><a href="#" id="nav-delete-users" class="nav-submenu-link"><span class="nav-icon">🗑️</span> <span>Delete Users</span></a></li>
+                </ul>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            <a href="settings.html" class="nav-link">
+                <span class="nav-icon">⚙️</span>
+                <span>Configuration</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- File Upload Group -->
+        <section class="config-group">
+            <div class="group-header">
+                <h2>Upload User CSV</h2>
+            </div>
+            <div class="group-content">
+                <div class="file-upload-container">
+                    <input type="file" id="csv-file" accept=".csv" class="file-input"
+                           data-tippy-content="Select a CSV file containing user data to import">
+                    <label for="csv-file" class="file-label">
+                        <span>Choose CSV File</span>
+                    </label>
+                    <div id="file-info" class="file-info"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Import Controls Group -->
+        <section class="config-group">
+            <div class="group-header">
+                <h2>Import Controls</h2>
+            </div>
+            <div class="group-content">
+                <div class="import-controls">
+                    <button id="import-btn" class="btn btn-primary" 
+                            data-tippy-content="Start importing users from the selected CSV file">
+                        Start Import
+                    </button>
+                    <button id="modify-btn" class="btn btn-secondary"
+                            data-tippy-content="Modify selected users in the import results">
+                        Modify Selected Users
+                    </button>
+                    <button id="delete-btn" class="btn btn-danger"
+                            data-tippy-content="Delete selected users from the import results">
+                        Delete Selected Users
+                    </button>
+                </div>
+                
+                <!-- Import Progress -->
+                <div id="import-progress" class="import-progress hidden">
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="progress-status">Preparing...</span>
+                        <span id="progress-count">0 / 0</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Group -->
+        <section id="results-panel" class="config-group hidden">
+            <div class="group-header">
+                <h2>Import Results</h2>
+                <div class="panel-actions">
+                    <button id="export-results" class="btn btn-secondary"
+                            data-tippy-content="Download the import results as a CSV file">
+                        Download Results CSV
+                    </button>
+                </div>
+            </div>
+            <div class="group-content">
+                <div class="results-summary">
+                    <div class="summary-item">
+                        <span class="summary-label">Total Users:</span>
+                        <span id="total-records" class="summary-value">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Imported Successfully:</span>
+                        <span id="successful-count" class="summary-value success">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Failed Imports:</span>
+                        <span id="failed-count" class="summary-value error">0</span>
+                    </div>
+                </div>
+                
+                <div class="results-table-container">
+                    <table id="results-table" class="results-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-tbody"></tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div id="pagination" class="pagination hidden">
+                    <button id="prev-page" class="btn btn-secondary">Previous Page</button>
+                    <span id="page-info" class="page-info">Page 1 of 1</span>
+                    <button id="next-page" class="btn btn-secondary">Next Page</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <p>Built with Ping Identity APIs</p>
+        </div>
+    </footer>
+
+    <!-- Modal -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title"></h3>
+                <button id="modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="modal-body" class="modal-body"></div>
+            <div class="modal-footer">
+                <button id="modal-confirm" class="btn btn-primary">OK</button>
+                <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spinner -->
+    <div id="spinner" class="spinner hidden">
+        <div class="spinner-content">
+            <div class="spinner-icon"></div>
+            <p id="spinner-text">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js"></script>
+    <script src="https://unpkg.com/tippy.js@6/dist/tippy-bundle.umd.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html> 
