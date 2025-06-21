@@ -15,7 +15,6 @@ class MainPage {
         this.setupEventListeners();
         this.setupSidebarActions();
         this.loadDefaultFile();
-        this.updatePageLanguage();
         this.initializeTooltips();
         utils.log('Main page initialized', 'info');
     }
@@ -617,32 +616,6 @@ class MainPage {
         return [headers, ...rows]
             .map(row => row.map(cell => `"${cell}"`).join(','))
             .join('\n');
-    }
-
-    updatePageLanguage() {
-        const languageSelect = document.getElementById('language-select');
-        if (languageSelect) {
-            const savedLanguage = this.getCurrentSettings().language || 'en';
-            languageSelect.value = savedLanguage;
-            
-            languageSelect.addEventListener('change', (e) => {
-                const newLanguage = e.target.value;
-                const currentSettings = this.getCurrentSettings();
-                currentSettings.language = newLanguage;
-                localStorage.setItem('pingone-settings', JSON.stringify(currentSettings));
-                utils.log('Language changed', 'info');
-            });
-        }
-    }
-
-    getCurrentSettings() {
-        try {
-            const settings = localStorage.getItem('pingone-settings');
-            return settings ? JSON.parse(settings) : {};
-        } catch (error) {
-            utils.log(`Failed to get current settings: ${error.message}`, 'error');
-            return {};
-        }
     }
 }
 
