@@ -1,0 +1,328 @@
+const express = require('express');
+const axios = require('axios');
+const { logger } = require('../utils/logger');
+const { getWorkerToken } = require('./token');
+
+const router = express.Router();
+
+// DELETE /api/delete/user/:userId - Delete a specific user
+router.delete('/user/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { environmentId, clientId, clientSecret } = req.body;
+        
+        if (!environmentId || !clientId || !clientSecret) {
+            return res.status(400).json({
+                error: 'Missing required fields: environmentId, clientId, clientSecret'
+            });
+        }
+
+        logger.info('Deleting user', {
+            userId,
+            environmentId
+        });
+
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        
+        await axios.delete(
+            `https://api.pingone.com/v1/environments/${environmentId}/users/${userId}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        logger.info('User deleted successfully', {
+            userId,
+            environmentId
+        });
+
+        res.json({
+            success: true,
+            message: 'User deleted successfully'
+        });
+
+    } catch (error) {
+        logger.error('User deletion error', {
+            userId: req.params.userId,
+            error: error.message,
+            response: error.response?.data
+        });
+
+        if (error.response?.status === 404) {
+            res.status(404).json({
+                error: 'User not found'
+            });
+        } else if (error.response?.status === 403) {
+            res.status(403).json({
+                error: 'Insufficient permissions to delete user'
+            });
+        } else {
+            res.status(500).json({
+                error: 'Failed to delete user',
+                details: error.message
+            });
+        }
+    }
+});
+
+// POST /api/delete/bulk - Bulk delete users
+router.post('/bulk', async (req, res) => {
+    try {
+        const { userIds, environmentId, clientId, clientSecret } = req.body;
+        
+        if (!userIds || !Array.isArray(userIds) || !environmentId || !clientId || !clientSecret) {
+            return res.status(400).json({
+                error: 'Missing required fields: userIds (array), environmentId, clientId, clientSecret'
+            });
+        }
+
+        logger.info('Starting bulk user deletion', {
+            userCount: userIds.length,
+            environmentId
+        });
+
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        const results = [];
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const userId of userIds) {
+            try {
+                await axios.delete(
+                    `https://api.pingone.com/v1/environments/${environmentId}/users/${userId}`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+
+                results.push({
+                    userId,
+                    status: 'success',
+                    message: 'User deleted successfully'
+                });
+                
+                successCount++;
+                
+            } catch (error) {
+                const errorMessage = error.response?.data?.detail || error.message;
+                
+                results.push({
+                    userId,
+                    status: 'error',
+                    message: errorMessage
+                });
+                
+                errorCount++;
+            }
+        }
+
+        logger.info('Bulk user deletion completed', {
+            total: userIds.length,
+            successCount,
+            errorCount
+        });
+
+        res.json({
+            success: true,
+            results,
+            summary: {
+                total: userIds.length,
+                successful: successCount,
+                failed: errorCount
+            }
+        });
+
+    } catch (error) {
+        logger.error('Bulk user deletion error', {
+            error: error.message,
+            stack: error.stack
+        });
+
+        res.status(500).json({
+            error: 'Failed to perform bulk user deletion',
+            details: error.message
+        });
+    }
+});
+
+// POST /api/delete/by-username - Delete user by username
+router.post('/by-username', async (req, res) => {
+    try {
+        const { username, environmentId, clientId, clientSecret } = req.body;
+        
+        if (!username || !environmentId || !clientId || !clientSecret) {
+            return res.status(400).json({
+                error: 'Missing required fields: username, environmentId, clientId, clientSecret'
+            });
+        }
+
+        logger.info('Deleting user by username', {
+            username,
+            environmentId
+        });
+
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        
+        // First, find the user by username
+        const searchResponse = await axios.get(
+            `https://api.pingone.com/v1/environments/${environmentId}/users`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    filter: `username eq "${username}"`
+                }
+            }
+        );
+
+        if (!searchResponse.data._embedded || !searchResponse.data._embedded.users || searchResponse.data._embedded.users.length === 0) {
+            return res.status(404).json({
+                error: 'User not found'
+            });
+        }
+
+        const user = searchResponse.data._embedded.users[0];
+        
+        // Delete the user
+        await axios.delete(
+            `https://api.pingone.com/v1/environments/${environmentId}/users/${user.id}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        logger.info('User deleted by username successfully', {
+            username,
+            userId: user.id,
+            environmentId
+        });
+
+        res.json({
+            success: true,
+            userId: user.id,
+            message: 'User deleted successfully'
+        });
+
+    } catch (error) {
+        logger.error('Delete user by username error', {
+            username: req.body.username,
+            error: error.message,
+            response: error.response?.data
+        });
+
+        if (error.response?.status === 404) {
+            res.status(404).json({
+                error: 'User not found'
+            });
+        } else if (error.response?.status === 403) {
+            res.status(403).json({
+                error: 'Insufficient permissions to delete user'
+            });
+        } else {
+            res.status(500).json({
+                error: 'Failed to delete user',
+                details: error.message
+            });
+        }
+    }
+});
+
+// POST /api/delete/by-email - Delete user by email
+router.post('/by-email', async (req, res) => {
+    try {
+        const { email, environmentId, clientId, clientSecret } = req.body;
+        
+        if (!email || !environmentId || !clientId || !clientSecret) {
+            return res.status(400).json({
+                error: 'Missing required fields: email, environmentId, clientId, clientSecret'
+            });
+        }
+
+        logger.info('Deleting user by email', {
+            email,
+            environmentId
+        });
+
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        
+        // First, find the user by email
+        const searchResponse = await axios.get(
+            `https://api.pingone.com/v1/environments/${environmentId}/users`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    filter: `email eq "${email}"`
+                }
+            }
+        );
+
+        if (!searchResponse.data._embedded || !searchResponse.data._embedded.users || searchResponse.data._embedded.users.length === 0) {
+            return res.status(404).json({
+                error: 'User not found'
+            });
+        }
+
+        const user = searchResponse.data._embedded.users[0];
+        
+        // Delete the user
+        await axios.delete(
+            `https://api.pingone.com/v1/environments/${environmentId}/users/${user.id}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        logger.info('User deleted by email successfully', {
+            email,
+            userId: user.id,
+            environmentId
+        });
+
+        res.json({
+            success: true,
+            userId: user.id,
+            message: 'User deleted successfully'
+        });
+
+    } catch (error) {
+        logger.error('Delete user by email error', {
+            email: req.body.email,
+            error: error.message,
+            response: error.response?.data
+        });
+
+        if (error.response?.status === 404) {
+            res.status(404).json({
+                error: 'User not found'
+            });
+        } else if (error.response?.status === 403) {
+            res.status(403).json({
+                error: 'Insufficient permissions to delete user'
+            });
+        } else {
+            res.status(500).json({
+                error: 'Failed to delete user',
+                details: error.message
+            });
+        }
+    }
+});
+
+module.exports = router; 
