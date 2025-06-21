@@ -6,6 +6,7 @@ class Utils {
             token: null,
             expiresAt: null
         };
+        this.settings = {};
         this.init();
     }
 
@@ -88,6 +89,21 @@ class Utils {
     }
 
     // Settings Management
+    getStoredCredentials() {
+        const creds = {
+            environmentId: this.settings.environmentId,
+            clientId: this.settings.clientId,
+            clientSecret: this.settings.clientSecret,
+            baseUrl: this.settings.baseUrl
+        };
+        
+        if (creds.environmentId && creds.clientId) {
+            return creds;
+        }
+        
+        return null;
+    }
+
     saveSettings() {
         const settings = {
             // Add other settings as needed
@@ -105,11 +121,12 @@ class Utils {
         try {
             const settings = localStorage.getItem('pingone-settings');
             if (settings) {
-                const parsed = JSON.parse(settings);
+                this.settings = JSON.parse(settings);
                 this.log('Settings loaded', 'info');
             }
         } catch (error) {
             this.log(`Failed to load settings: ${error.message}`, 'error');
+            this.settings = {};
         }
     }
 
