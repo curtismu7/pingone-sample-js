@@ -20,16 +20,20 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
     }
     
     logger.info('Getting new worker token', { environmentId, clientId });
+
+    // Construct the correct token endpoint URL
+    const tokenUrl = `https://auth.pingone.com/${environmentId}/as/token`;
     
     try {
-        const response = await axios.post('https://auth.pingone.com/as/token', 
+        const response = await axios.post(
+            tokenUrl,
             new URLSearchParams({
-                grant_type: 'client_credentials',
-                client_id: clientId,
-                client_secret: clientSecret
-            }), {
+                'grant_type': 'client_credentials'
+            }),
+            {
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`
                 }
             }
         );
@@ -50,16 +54,25 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
             
             return response.data.access_token;
         } else {
-            throw new Error('Invalid token response');
+            throw new Error('Invalid token response from PingOne');
         }
     } catch (error) {
-        logger.error('Failed to get worker token', {
+        logger.error('Failed to get worker token from PingOne', {
             environmentId,
             clientId,
+            url: tokenUrl,
             error: error.message,
+            statusCode: error.response?.status,
             response: error.response?.data
         });
-        throw error;
+
+        // Re-throw a more specific error
+        if (error.response) {
+            const { status, data } = error.response;
+            throw new Error(`PingOne API error (${status}): ${JSON.stringify(data)}`);
+        } else {
+            throw new Error(`Failed to communicate with PingOne API: ${error.message}`);
+        }
     }
 };
 
@@ -71,7 +84,7 @@ router.post('/', async (req, res) => {
         // Validate required fields
         if (!environmentId || !clientId || !clientSecret) {
             return res.status(400).json({
-                error: 'Missing required fields: environmentId, clientId, clientSecret'
+                error: 'Missing required fields: environmentId, clientId, and clientSecret are all required.'
             });
         }
         
@@ -84,22 +97,23 @@ router.post('/', async (req, res) => {
         });
         
     } catch (error) {
-        logger.error('Token endpoint error', {
-            error: error.message,
+        logger.error('Token endpoint processing error', {
+            errorMessage: error.message,
             stack: error.stack
         });
         
-        if (error.response?.status === 401) {
+        // Check for specific error messages from getWorkerToken
+        if (error.message.includes('PingOne API error (401)')) {
             res.status(401).json({
-                error: 'Invalid credentials'
+                error: 'Invalid PingOne credentials. Please check your Client ID and Client Secret.'
             });
-        } else if (error.response?.status === 400) {
+        } else if (error.message.includes('PingOne API error (400)')) {
             res.status(400).json({
-                error: 'Invalid request parameters'
+                error: 'Invalid request to PingOne. Please check your Environment ID.'
             });
         } else {
             res.status(500).json({
-                error: 'Failed to get worker token'
+                error: 'An internal server error occurred while trying to get a token from PingOne.'
             });
         }
     }
