@@ -1,21 +1,30 @@
-/* Ping Identity Brand Colors */
+/* Ping Identity Brand Colors - New Palette */
 :root {
-    --ping-red: #d32f2f;
-    --ping-red-dark: #b71c1c;
-    --ping-red-light: #ffcdd2;
-    --ping-gray: #f5f5f5;
-    --ping-gray-dark: #757575;
-    --ping-gray-light: #fafafa;
-    --ping-blue: #1976d2;
-    --ping-blue-dark: #1565c0;
-    --ping-blue-light: #e3f2fd;
-    --white: #ffffff;
-    --black: #212121;
-    --error: #f44336;
-    --success: #4caf50;
-    --warning: #ff9800;
-    --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    --shadow-hover: 0 4px 8px rgba(0, 0, 0, 0.15);
+    --ping-blue-deep: #0d1c2b;    /* Dark sidebar background */
+    --ping-blue-nav: #1d2c3f;     /* Lighter nav background */
+    --ping-blue-primary: #3a86ff; /* Primary buttons and links */
+    --ping-blue-secondary: #e3f2fd;/* Light blue for highlights */
+    --ping-gray-light: #f5f7fa;   /* Main background color */
+    --ping-gray-medium: #e0e6ed;  /* Borders and dividers */
+    --ping-gray-dark: #6c757d;    /* Secondary text */
+    --ping-white: #ffffff;
+    --ping-black: #212529;
+
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --text-on-dark: #ffffff;
+
+    --primary: var(--ping-blue-primary);
+    --secondary: var(--ping-gray-dark);
+    --background: var(--ping-gray-light);
+    --surface: var(--ping-white);
+    --border: var(--ping-gray-medium);
+
+    --error: #d32f2f;
+    --success: #28a745;
+    --warning: #ffc107;
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    --shadow-hover: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* Reset and Base Styles */
@@ -28,8 +37,8 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     line-height: 1.6;
-    color: var(--black);
-    background-color: var(--ping-gray-light);
+    color: var(--text-primary);
+    background-color: var(--background);
     overflow-x: hidden;
 }
 
@@ -37,54 +46,7 @@ body {
     display: none !important;
 }
 
-/* Layout */
-.header {
-    background-color: var(--ping-red);
-    color: var(--white);
-    padding: 1rem 0;
-    box-shadow: var(--shadow);
-}
-
-.header-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 2rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.logo-container {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.logo {
-    height: 40px;
-    width: auto;
-}
-
-.logo-container h1 {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 600;
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.language-selector select {
-    padding: 0.5rem;
-    border: none;
-    border-radius: 4px;
-    background-color: var(--white);
-    color: var(--black);
-    font-size: 0.9rem;
-}
+/* Layout - No header, handled by sidebar */
 
 /* Sidebar Navigation */
 .sidebar {
@@ -93,8 +55,8 @@ body {
     top: 0;
     width: 250px;
     height: 100vh;
-    background-color: var(--white);
-    border-right: 1px solid #e0e0e0;
+    background-color: var(--ping-blue-nav);
+    color: var(--text-on-dark);
     display: flex;
     flex-direction: column;
     z-index: 1000;
@@ -102,7 +64,7 @@ body {
 
 .nav-logo {
     padding: 1.5rem;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     text-align: center;
 }
 
@@ -127,27 +89,32 @@ body {
     align-items: center;
     gap: 0.75rem;
     padding: 1rem 1.5rem;
-    color: var(--black);
+    color: var(--text-on-dark);
     text-decoration: none;
     transition: all 0.2s;
-    border-left: 3px solid transparent;
+    border-left: 4px solid transparent;
 }
 
 .nav-link:hover {
-    background-color: var(--ping-gray-light);
-    color: var(--ping-blue);
+    background-color: var(--ping-blue-deep);
 }
 
 .nav-link.active {
-    background-color: var(--ping-red);
-    color: var(--white);
-    border-left-color: var(--white);
+    background-color: var(--ping-blue-deep);
+    color: var(--ping-white);
+    font-weight: 600;
+    border-left-color: var(--primary);
 }
 
 .nav-icon {
     font-size: 1.1rem;
     width: 20px;
     text-align: center;
+    color: var(--ping-gray-medium);
+}
+
+.nav-link.active .nav-icon {
+    color: var(--primary);
 }
 
 .nav-arrow {
@@ -156,14 +123,14 @@ body {
 }
 
 .nav-dropdown.open .nav-arrow {
-    transform: rotate(180deg);
+    transform: rotate(90deg);
 }
 
 .nav-submenu {
     list-style: none;
     padding: 0;
     margin: 0;
-    background-color: var(--ping-gray-light);
+    background-color: var(--ping-blue-deep);
     overflow: hidden;
     transition: max-height 0.3s ease;
 }
@@ -173,19 +140,17 @@ body {
 }
 
 .nav-submenu-link {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1.5rem 0.75rem 3rem;
-    color: var(--black);
+    display: block;
+    padding: 0.75rem 1.5rem 0.75rem 3.2rem;
+    color: var(--text-on-dark);
     text-decoration: none;
     font-size: 0.9rem;
     transition: all 0.2s;
 }
 
 .nav-submenu-link:hover {
-    background-color: var(--white);
-    color: var(--ping-blue);
+    color: var(--ping-white);
+    background-color: var(--primary);
 }
 
 .nav-submenu-link.disabled {
@@ -195,30 +160,30 @@ body {
 
 .sidebar-footer {
     padding: 1rem 1.5rem;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Main Content */
 .main-content {
     margin-left: 250px;
     padding: 2rem;
-    min-height: calc(100vh - 80px);
-    background-color: var(--ping-gray-light);
+    min-height: 100vh;
 }
 
 /* Panels */
 .panel {
-    background-color: var(--white);
+    background-color: var(--surface);
     border-radius: 8px;
     box-shadow: var(--shadow);
     margin-bottom: 2rem;
+    border: 1px solid var(--border);
     overflow: hidden;
 }
 
 .panel-header {
-    background-color: var(--ping-gray);
-    padding: 1.5rem;
-    border-bottom: 1px solid #e0e0e0;
+    background-color: var(--surface);
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -227,7 +192,7 @@ body {
 .panel-header h2 {
     font-size: 1.25rem;
     font-weight: 600;
-    color: var(--black);
+    color: var(--text-primary);
 }
 
 .panel-actions {
@@ -245,50 +210,53 @@ body {
     align-items: center;
     justify-content: center;
     padding: 0.75rem 1.5rem;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 4px;
     font-size: 0.9rem;
-    font-weight: 500;
-    text-decoration: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 44px;
-    gap: 0.5rem;
+    text-decoration: none;
 }
 
 .btn:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: not-allowed;
 }
 
 .btn-primary {
-    background-color: var(--ping-red);
-    color: var(--white);
+    background-color: var(--primary);
+    color: var(--ping-white);
+    border-color: var(--primary);
 }
 
 .btn-primary:hover:not(:disabled) {
-    background-color: var(--ping-red-dark);
-    box-shadow: var(--shadow-hover);
+    background-color: #1e71e5; /* Slightly darker blue */
+    border-color: #1e71e5;
 }
 
 .btn-secondary {
-    background-color: var(--ping-gray-dark);
-    color: var(--white);
+    background-color: var(--surface);
+    color: var(--text-primary);
+    border-color: var(--border);
 }
 
 .btn-secondary:hover:not(:disabled) {
-    background-color: #616161;
-    box-shadow: var(--shadow-hover);
+    background-color: var(--ping-gray-light);
+    border-color: var(--ping-gray-dark);
 }
 
 .btn-danger {
     background-color: var(--error);
-    color: var(--white);
+    color: var(--ping-white);
+    border-color: var(--error);
 }
 
 .btn-danger:hover:not(:disabled) {
-    background-color: #d32f2f;
-    box-shadow: var(--shadow-hover);
+    background-color: #b71c1c; /* Darker red */
+    border-color: #b71c1c;
 }
 
 /* Forms */
@@ -306,14 +274,14 @@ body {
 
 .form-group label {
     font-weight: 500;
-    color: var(--black);
+    color: var(--text-primary);
 }
 
 .form-group input,
 .form-group select,
 .form-group textarea {
     padding: 0.75rem;
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--border);
     border-radius: 4px;
     font-size: 0.9rem;
     transition: border-color 0.2s;
@@ -323,8 +291,8 @@ body {
 .form-group select:focus,
 .form-group textarea:focus {
     outline: none;
-    border-color: var(--ping-red);
-    box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.1);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(58, 134, 255, 0.1);
 }
 
 .checkbox-group {
@@ -349,18 +317,18 @@ body {
 
 /* File Upload */
 .file-upload-container {
-    border: 2px dashed #e0e0e0;
+    border: 2px dashed var(--border);
     border-radius: 8px;
     padding: 2rem;
     text-align: center;
-    background-color: var(--white);
+    background-color: var(--surface);
     transition: all 0.2s;
     cursor: pointer;
 }
 
 .file-upload-container:hover {
-    border-color: var(--ping-blue);
-    background-color: var(--ping-blue-light);
+    border-color: var(--primary);
+    background-color: var(--ping-blue-secondary);
 }
 
 .file-input {
@@ -370,8 +338,8 @@ body {
 .file-label {
     display: inline-block;
     padding: 0.75rem 1.5rem;
-    background-color: var(--ping-blue);
-    color: var(--white);
+    background-color: var(--primary);
+    color: var(--ping-white);
     border-radius: 6px;
     cursor: pointer;
     font-weight: 600;
@@ -379,7 +347,7 @@ body {
 }
 
 .file-label:hover {
-    background-color: var(--ping-blue-dark);
+    background-color: #1e71e5;
     transform: translateY(-1px);
 }
 
@@ -389,7 +357,7 @@ body {
     padding: 1rem;
     background-color: var(--ping-gray-light);
     border-radius: 6px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--border);
 }
 
 .file-info div {
@@ -421,7 +389,7 @@ body {
 .progress-bar {
     width: 100%;
     height: 8px;
-    background-color: #e0e0e0;
+    background-color: var(--border);
     border-radius: 4px;
     overflow: hidden;
     margin-bottom: 0.5rem;
@@ -429,7 +397,7 @@ body {
 
 .progress-fill {
     height: 100%;
-    background-color: var(--ping-blue);
+    background-color: var(--primary);
     transition: width 0.3s ease;
     width: 0%;
 }
@@ -438,7 +406,7 @@ body {
     display: flex;
     justify-content: space-between;
     font-size: 0.9rem;
-    color: var(--ping-gray-dark);
+    color: var(--text-secondary);
 }
 
 /* Results Styles */
