@@ -151,7 +151,6 @@ class Utils {
         const modal = document.getElementById('modal');
         const modalClose = document.getElementById('modal-close');
         const modalCancel = document.getElementById('modal-cancel');
-        const modalConfirm = document.getElementById('modal-confirm');
 
         if (modalClose) {
             modalClose.addEventListener('click', () => this.hideModal());
@@ -181,7 +180,7 @@ class Utils {
         const modal = document.getElementById('modal');
         const modalTitle = document.getElementById('modal-title');
         const modalBody = document.getElementById('modal-body');
-        const modalConfirm = document.getElementById('modal-confirm');
+        let modalConfirm = document.getElementById('modal-confirm');
         const modalCancel = document.getElementById('modal-cancel');
 
         if (!modal || !modalTitle || !modalBody || !modalConfirm || !modalCancel) {
@@ -196,9 +195,10 @@ class Utils {
 
         modalCancel.classList.toggle('hidden', !options.showCancel);
 
-        // Cloned to remove previous event listeners
+        // Replace the button with a clone of itself to remove all old event listeners
         const newConfirm = modalConfirm.cloneNode(true);
         modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
+        modalConfirm = newConfirm;
         
         const confirmHandler = () => {
             if (options.onConfirm) {
@@ -207,7 +207,7 @@ class Utils {
             this.hideModal();
         };
 
-        newConfirm.addEventListener('click', confirmHandler);
+        modalConfirm.addEventListener('click', confirmHandler);
 
         modal.classList.remove('hidden');
     }
