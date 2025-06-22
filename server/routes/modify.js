@@ -162,14 +162,44 @@ router.post('/bulk', async (req, res) => {
 
         for (const userUpdate of users) {
             try {
-                const { userId, userData } = userUpdate;
+                const { userId, userData, username } = userUpdate;
                 
-                if (!userId || !userData) {
-                    throw new Error('Missing userId or userData');
+                if (!userId && !username) {
+                    throw new Error('Missing userId or username');
+                }
+                
+                if (!userData) {
+                    throw new Error('Missing userData');
                 }
 
-                const response = await axios.put(
-                    `https://api.pingone.com/v1/environments/${environmentId}/users/${userId}`,
+                let targetUserId = userId;
+                
+                // If we have username but no userId, find the user first
+                if (!userId && username) {
+                    logger.info('Finding user by username for modification', { username });
+                    
+                    const searchResponse = await axios.get(
+                        `https://api.pingone.com/v1/environments/${environmentId}/users`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            params: {
+                                filter: `username eq "${username}"`
+                            }
+                        }
+                    );
+
+                    if (!searchResponse.data._embedded?.users?.length) {
+                        throw new Error(`User not found with username: ${username}`);
+                    }
+                    
+                    targetUserId = searchResponse.data._embedded.users[0].id;
+                }
+
+                const response = await axios.patch(
+                    `https://api.pingone.com/v1/environments/${environmentId}/users/${targetUserId}`,
                     userData,
                     {
                         headers: {
@@ -180,7 +210,8 @@ router.post('/bulk', async (req, res) => {
                 );
 
                 results.push({
-                    userId,
+                    userId: targetUserId,
+                    username: username || 'unknown',
                     status: 'success',
                     message: 'User modified successfully',
                     user: response.data
@@ -189,10 +220,19 @@ router.post('/bulk', async (req, res) => {
                 successCount++;
                 
             } catch (error) {
-                const errorMessage = error.response?.data?.detail || error.message;
+                logger.error('Individual user modification error', {
+                    userId: userUpdate.userId,
+                    username: userUpdate.username,
+                    error: error.message,
+                    status: error.response?.status,
+                    responseData: error.response?.data
+                });
+                
+                const errorMessage = error.response?.data?.detail || error.response?.data?.message || error.message;
                 
                 results.push({
                     userId: userUpdate.userId || 'unknown',
+                    username: userUpdate.username || 'unknown',
                     status: 'error',
                     message: errorMessage
                 });
@@ -227,6 +267,100 @@ router.post('/bulk', async (req, res) => {
             error: 'Failed to perform bulk user modification',
             details: error.message
         });
+    }
+});
+
+// POST /api/modify/by-username - Modify user by username
+router.post('/by-username', async (req, res) => {
+    try {
+        const { username, userData, environmentId, clientId, clientSecret } = req.body;
+        
+        if (!username || !userData || !environmentId || !clientId || !clientSecret) {
+            return res.status(400).json({
+                error: 'Missing required fields: username, userData, environmentId, clientId, clientSecret'
+            });
+        }
+
+        logger.info('Modifying user by username', {
+            username,
+            environmentId,
+            fields: Object.keys(userData)
+        });
+
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        
+        // First, find the user by username
+        const searchResponse = await axios.get(
+            `https://api.pingone.com/v1/environments/${environmentId}/users`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    filter: `username eq "${username}"`
+                }
+            }
+        );
+
+        if (!searchResponse.data._embedded?.users?.length) {
+            return res.status(404).json({
+                error: 'User not found',
+                details: `No user found with username: ${username}`
+            });
+        }
+
+        const user = searchResponse.data._embedded.users[0];
+        
+        // Modify the user
+        const response = await axios.patch(
+            `https://api.pingone.com/v1/environments/${environmentId}/users/${user.id}`,
+            userData,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        logger.info('User modified by username successfully', {
+            username,
+            userId: user.id,
+            environmentId
+        });
+
+        res.json({
+            success: true,
+            userId: user.id,
+            user: response.data,
+            message: 'User modified successfully'
+        });
+
+    } catch (error) {
+        logger.error('Modify user by username error', {
+            username: req.body.username,
+            error: error.message,
+            status: error.response?.status,
+            responseData: error.response?.data
+        });
+
+        if (error.response?.status === 404) {
+            res.status(404).json({
+                error: 'User not found',
+                details: error.response?.data || error.message
+            });
+        } else if (error.response?.status === 400) {
+            res.status(400).json({
+                error: 'Invalid user data',
+                details: error.response?.data || error.message
+            });
+        } else {
+            res.status(500).json({
+                error: 'Failed to modify user',
+                details: error.response?.data || error.message
+            });
+        }
     }
 });
 
