@@ -368,4 +368,99 @@ router.post('/by-email', async (req, res) => {
     }
 });
 
+// Main endpoint for bulk delete, now at /api/delete
+router.post('/', async (req, res) => {
+    try {
+        const { usernames, environmentId, clientId, clientSecret } = req.body;
+
+        if (!usernames || !Array.isArray(usernames) || !environmentId || !clientId || !clientSecret) {
+            return res.status(400).json({
+                error: 'Missing required fields: usernames (array), environmentId, clientId, clientSecret'
+            });
+        }
+
+        logManager.info('Starting bulk user deletion by username', {
+            userCount: usernames.length,
+            environmentId
+        });
+
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        const results = [];
+        let successCount = 0;
+        let errorCount = 0;
+        let notFoundCount = 0;
+        const startTime = Date.now();
+
+        for (const username of usernames) {
+            try {
+                // Find the user by username first
+                const searchResponse = await axios.get(
+                    `https://api.pingone.com/v1/environments/${environmentId}/users?filter=username eq "${username}"`,
+                    {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }
+                );
+
+                if (searchResponse.data._embedded?.users?.length > 0) {
+                    const userId = searchResponse.data._embedded.users[0].id;
+
+                    // Delete the user by ID
+                    await axios.delete(
+                        `https://api.pingone.com/v1/environments/${environmentId}/users/${userId}`,
+                        {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        }
+                    );
+
+                    results.push({
+                        username,
+                        status: 'deleted',
+                        message: 'User deleted successfully'
+                    });
+                    successCount++;
+                } else {
+                    results.push({
+                        username,
+                        status: 'not_found',
+                        message: 'User not found'
+                    });
+                    notFoundCount++;
+                }
+            } catch (error) {
+                const errorMessage = error.response?.data?.message || error.message;
+                results.push({
+                    username,
+                    status: 'error',
+                    message: errorMessage
+                });
+                errorCount++;
+            }
+        }
+
+        const duration = Date.now() - startTime;
+        logManager.logDeleteOperation(successCount, usernames.length, notFoundCount, duration);
+
+        res.json({
+            success: true,
+            results,
+            summary: {
+                total: usernames.length,
+                successful: successCount,
+                failed: errorCount,
+                notFound: notFoundCount
+            }
+        });
+
+    } catch (error) {
+        logManager.error('Bulk user deletion error', {
+            error: error.message,
+            stack: error.stack
+        });
+        res.status(500).json({
+            error: 'Failed to perform bulk user deletion',
+            details: error.message
+        });
+    }
+});
+
 module.exports = router; 
