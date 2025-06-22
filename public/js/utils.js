@@ -443,14 +443,87 @@ class Utils {
                 <div id="spinner-overlay" class="spinner-overlay spinner hidden">
                     <div class="spinner-container">
                         <div class="spinner-content">
+                            <!-- Header Section -->
                             <div class="spinner-header">
-                                <h3 id="spinner-title">Loading...</h3>
-                                <div id="spinner-header-btn-container">
-                                    <button id="spinner-cancel" class="cancel-btn">Cancel</button>
+                                <div class="spinner-header-main">
+                                    <div class="spinner-icon-container">
+                                        <div class="spinner-icon"></div>
+                                    </div>
+                                    <div class="spinner-title-section">
+                                        <h3 id="spinner-title">Processing Operation</h3>
+                                        <div id="spinner-subtitle" class="spinner-subtitle">Initializing...</div>
+                                    </div>
+                                </div>
+                                <div id="spinner-header-btn-container" class="spinner-header-actions">
+                                    <button id="spinner-cancel" class="cancel-btn">Cancel Operation</button>
                                 </div>
                             </div>
+
+                            <!-- Operation Details Section -->
+                            <div id="spinner-details" class="spinner-details">
+                                <div class="operation-info">
+                                    <div class="info-row">
+                                        <span class="info-label">Operation Type:</span>
+                                        <span id="operation-type" class="info-value">-</span>
+                                    </div>
+                                    <div class="info-row">
+                                        <span class="info-label">File:</span>
+                                        <span id="operation-file" class="info-value">-</span>
+                                    </div>
+                                    <div class="info-row">
+                                        <span class="info-label">Records:</span>
+                                        <span id="operation-records" class="info-value">-</span>
+                                    </div>
+                                    <div class="info-row">
+                                        <span class="info-label">Started:</span>
+                                        <span id="operation-start-time" class="info-value">-</span>
+                                    </div>
+                                    <div class="info-row">
+                                        <span class="info-label">Elapsed Time:</span>
+                                        <span id="operation-elapsed" class="info-value">-</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Progress Section -->
+                            <div id="spinner-progress-section" class="spinner-progress-section">
+                                <div class="progress-header">
+                                    <span class="progress-label">Overall Progress</span>
+                                    <span id="progress-percentage" class="progress-percentage">0%</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div id="progress-bar" class="progress-bar">
+                                        <div id="progress-fill" class="progress-fill"></div>
+                                    </div>
+                                </div>
+                                <div id="spinner-progress" class="spinner-progress hidden"></div>
+                            </div>
+
+                            <!-- Steps Section -->
                             <div id="spinner-steps" class="spinner-steps"></div>
-                            <div id="spinner-progress" class="spinner-progress hidden"></div>
+
+                            <!-- Status Summary -->
+                            <div id="spinner-status-summary" class="spinner-status-summary hidden">
+                                <div class="status-summary-header">
+                                    <h4>Operation Summary</h4>
+                                </div>
+                                <div class="status-summary-content">
+                                    <div class="summary-row">
+                                        <span class="summary-label">Successful:</span>
+                                        <span id="summary-success" class="summary-value success">0</span>
+                                    </div>
+                                    <div class="summary-row">
+                                        <span class="summary-label">Failed:</span>
+                                        <span id="summary-failed" class="summary-value error">0</span>
+                                    </div>
+                                    <div class="summary-row">
+                                        <span class="summary-label">Total Time:</span>
+                                        <span id="summary-time" class="summary-value">-</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Footer Section -->
                             <div id="spinner-footer-btn-container" class="spinner-footer-btn-container hidden">
                                 <button id="spinner-close" class="close-btn">Close</button>
                             </div>
@@ -501,11 +574,12 @@ class Utils {
         this.log('Spinner displayed', 'debug', { text, showSteps });
     }
 
-    showOperationSpinner(message, fileName = null) {
+    showOperationSpinner(message, fileName = null, operationType = null, recordCount = null) {
         // Show enhanced spinner for operations with workflow steps
         // DEBUG: Use this for complex operations that need step-by-step progress
         const spinner = document.getElementById('spinner-overlay');
         const title = document.getElementById('spinner-title');
+        const subtitle = document.getElementById('spinner-subtitle');
         const steps = document.getElementById('spinner-steps');
         const progress = document.getElementById('spinner-progress');
 
@@ -514,13 +588,17 @@ class Utils {
             return;
         }
 
-        // Set title with file info if provided
-        let titleText = message;
-        if (fileName) {
-            titleText += ` (${fileName})`;
-        }
+        // Set title and subtitle
+        title.textContent = message;
+        subtitle.textContent = 'Initializing operation...';
         
-        title.textContent = titleText;
+        // Update operation details
+        this.updateOperationDetails(operationType, fileName, recordCount);
+        
+        // Initialize progress
+        this.updateProgress(0, 100);
+        
+        // Show sections
         steps.style.display = 'block';
         steps.innerHTML = ''; // Clear previous steps
         progress.classList.add('hidden');
@@ -528,14 +606,78 @@ class Utils {
         // Reset button to Cancel in header
         const headerBtn = document.getElementById('spinner-header-btn-container');
         const footerBtn = document.getElementById('spinner-footer-btn-container');
+        const statusSummary = document.getElementById('spinner-status-summary');
         if (headerBtn) headerBtn.classList.remove('hidden');
         if (footerBtn) footerBtn.classList.add('hidden');
-        document.getElementById('spinner-cancel').textContent = 'Cancel';
+        if (statusSummary) statusSummary.classList.add('hidden');
+        document.getElementById('spinner-cancel').textContent = 'Cancel Operation';
+        
+        // Start operation timer
+        this.operationStartTime = Date.now();
+        this.updateElapsedTime();
+        this.elapsedTimer = setInterval(() => this.updateElapsedTime(), 1000);
         
         spinner.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
 
-        this.log('Operation spinner displayed', 'debug', { message, fileName });
+        this.log('Operation spinner displayed', 'debug', { message, fileName, operationType, recordCount });
+    }
+
+    updateOperationDetails(operationType, fileName, recordCount) {
+        // Update operation details in the spinner
+        const typeElement = document.getElementById('operation-type');
+        const fileElement = document.getElementById('operation-file');
+        const recordsElement = document.getElementById('operation-records');
+        const startTimeElement = document.getElementById('operation-start-time');
+
+        if (typeElement) typeElement.textContent = operationType || '-';
+        if (fileElement) fileElement.textContent = fileName || '-';
+        if (recordsElement) recordCount ? recordsElement.textContent = recordCount.toLocaleString() : recordsElement.textContent = '-';
+        if (startTimeElement) startTimeElement.textContent = this.formatDateTime(new Date());
+    }
+
+    updateProgress(current, total) {
+        // Update progress bar and percentage
+        const progressFill = document.getElementById('progress-fill');
+        const progressPercentage = document.getElementById('progress-percentage');
+        
+        if (progressFill && progressPercentage) {
+            const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+            progressFill.style.width = `${percentage}%`;
+            progressPercentage.textContent = `${percentage}%`;
+        }
+    }
+
+    updateElapsedTime() {
+        // Update elapsed time display
+        const elapsedElement = document.getElementById('operation-elapsed');
+        if (elapsedElement && this.operationStartTime) {
+            const elapsed = Date.now() - this.operationStartTime;
+            elapsedElement.textContent = this.formatElapsedTime(elapsed);
+        }
+    }
+
+    formatElapsedTime(milliseconds) {
+        // Format elapsed time in a readable format
+        const seconds = Math.floor(milliseconds / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        
+        if (hours > 0) {
+            return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${seconds % 60}s`;
+        } else {
+            return `${seconds}s`;
+        }
+    }
+
+    updateSpinnerSubtitle(text) {
+        // Update the subtitle text
+        const subtitle = document.getElementById('spinner-subtitle');
+        if (subtitle) {
+            subtitle.textContent = text;
+        }
     }
 
     addSpinnerStep(stepText, status = 'loading', stepId = null, icon = null) {
@@ -649,55 +791,55 @@ class Utils {
     }
 
     startProgressSimulation(totalRecords, estimatedDurationMs = 10000, fileName = null) {
-        // Start realistic progress simulation for operations
-        // DEBUG: If progress doesn't update smoothly, check timing calculations
-        this.stopProgressSimulation(); // Stop any existing simulation
-        
-        const updateInterval = 500; // Update every 500ms
-        const minTimePerRecord = 150; // Minimum 150ms per record
-        const actualDuration = Math.max(estimatedDurationMs, totalRecords * minTimePerRecord);
-        
-        let currentRecord = 0;
-        
-        // Determine increment based on total records
-        let incrementPerUpdate;
-        if (totalRecords <= 100) {
-            incrementPerUpdate = 1; // Count by 1 for under 100 records
-        } else if (totalRecords <= 250) {
-            incrementPerUpdate = 5; // Count by 5 for 100-250 records
-        } else if (totalRecords <= 1000) {
-            incrementPerUpdate = 10; // Count by 10 for 250-1000 records
-        } else if (totalRecords <= 10000) {
-            incrementPerUpdate = 25; // Count by 25 for 1000-10000 records
-        } else {
-            incrementPerUpdate = 100; // Count by 100 for over 10000 records
-        }
-        
-        // Calculate how many updates we need to complete the operation
-        const totalUpdates = Math.ceil(totalRecords / incrementPerUpdate);
-        const timePerUpdate = actualDuration / totalUpdates;
-        
+        // Start progress simulation for operations
+        // DEBUG: Check if progress updates are called with correct parameters
+        this.stopProgressSimulation();
         this.progressSimulationActive = true;
         
+        // Calculate dynamic increment based on record count
+        let incrementPerUpdate;
+        if (totalRecords <= 10) {
+            incrementPerUpdate = 1;
+        } else if (totalRecords <= 50) {
+            incrementPerUpdate = 5;
+        } else if (totalRecords <= 200) {
+            incrementPerUpdate = 10;
+        } else if (totalRecords <= 1000) {
+            incrementPerUpdate = 25;
+        } else {
+            incrementPerUpdate = 100;
+        }
+
+        const totalUpdates = Math.ceil(totalRecords / incrementPerUpdate);
+        const timePerUpdate = estimatedDurationMs / totalUpdates;
+        let currentProgress = 0;
+
         this.progressInterval = setInterval(() => {
-            if (!this.progressSimulationActive) {
-                clearInterval(this.progressInterval);
-                return;
+            if (!this.progressSimulationActive) return;
+
+            currentProgress = Math.min(currentProgress + incrementPerUpdate, totalRecords);
+            
+            // Update progress bar
+            this.updateProgress(currentProgress, totalRecords);
+            
+            // Update processing step text
+            const stepElement = document.getElementById('step-processing');
+            if (stepElement) {
+                const stepText = `🔢 Processing records: ${currentProgress.toLocaleString()}/${totalRecords.toLocaleString()}`;
+                stepElement.querySelector('.step-text').textContent = stepText;
             }
             
-            currentRecord = Math.min(currentRecord + incrementPerUpdate, totalRecords);
-            const displayRecord = Math.floor(currentRecord);
-            
-            this.updateSpinnerProgress(displayRecord, totalRecords, 'Importing');
-            
-            if (displayRecord >= totalRecords) {
+            // Update subtitle
+            this.updateSpinnerSubtitle(`Processing ${currentProgress.toLocaleString()} of ${totalRecords.toLocaleString()} records...`);
+
+            if (currentProgress >= totalRecords) {
                 this.stopProgressSimulation();
             }
         }, timePerUpdate);
         
         this.log('Progress simulation started', 'debug', { 
             totalRecords, 
-            estimatedDurationMs: actualDuration,
+            estimatedDurationMs,
             fileName,
             incrementPerUpdate,
             totalUpdates,
@@ -726,13 +868,21 @@ class Utils {
     completeOperationSpinner(successCount, failedCount = 0) {
         // Complete operation spinner with final results
         this.stopProgressSimulation();
+        this.stopElapsedTimer();
         
         // Update final step
         const stepElement = document.getElementById('step-processing');
         if (stepElement) {
-            stepElement.querySelector('.step-text').textContent = `✅ Operation completed: ${successCount} successful, ${failedCount} failed`;
+            const stepText = `✅ Operation completed: ${successCount} successful, ${failedCount} failed`;
+            stepElement.querySelector('.step-text').textContent = stepText;
             stepElement.className = 'spinner-step success';
         }
+        
+        // Update subtitle
+        this.updateSpinnerSubtitle('Operation completed successfully');
+        
+        // Show status summary
+        this.showStatusSummary(successCount, failedCount);
         
         // Hide progress
         const progressElement = document.getElementById('spinner-progress');
@@ -752,6 +902,7 @@ class Utils {
     failOperationSpinner(stepId, error) {
         // Mark operation spinner as failed
         this.stopProgressSimulation();
+        this.stopElapsedTimer();
         
         const stepElement = document.getElementById(stepId);
         if (stepElement) {
@@ -759,28 +910,67 @@ class Utils {
             stepElement.className = 'spinner-step error';
         }
         
+        // Update subtitle
+        this.updateSpinnerSubtitle('Operation failed');
+        
+        // Show status summary with 0 success
+        this.showStatusSummary(0, 1);
+        
         // Move button to footer and change to Close
         const headerBtn = document.getElementById('spinner-header-btn-container');
         const footerBtn = document.getElementById('spinner-footer-btn-container');
         if (headerBtn) headerBtn.classList.add('hidden');
         if (footerBtn) footerBtn.classList.remove('hidden');
         
-        this.log('Operation spinner failed', 'error', { stepId, error });
+        this.log('Operation spinner failed', 'debug', { stepId, error });
+    }
+
+    showStatusSummary(successCount, failedCount) {
+        // Show the status summary section
+        const statusSummary = document.getElementById('spinner-status-summary');
+        const successElement = document.getElementById('summary-success');
+        const failedElement = document.getElementById('summary-failed');
+        const timeElement = document.getElementById('summary-time');
+        
+        if (statusSummary && successElement && failedElement && timeElement) {
+            successElement.textContent = successCount.toLocaleString();
+            failedElement.textContent = failedCount.toLocaleString();
+            
+            // Calculate total time
+            if (this.operationStartTime) {
+                const totalTime = Date.now() - this.operationStartTime;
+                timeElement.textContent = this.formatElapsedTime(totalTime);
+            }
+            
+            statusSummary.classList.remove('hidden');
+        }
+    }
+
+    stopElapsedTimer() {
+        // Stop the elapsed time timer
+        if (this.elapsedTimer) {
+            clearInterval(this.elapsedTimer);
+            this.elapsedTimer = null;
+        }
     }
 
     hideSpinner() {
-        // Hide spinner and clean up
-        // DEBUG: If spinner doesn't hide, check if this function is called
+        // Hide spinner and reset state
+        // DEBUG: If spinner doesn't hide, check CSS classes and DOM structure
+        this.stopProgressSimulation();
+        this.stopElapsedTimer();
+        
         const spinner = document.getElementById('spinner-overlay');
         if (spinner) {
             spinner.classList.add('hidden');
-            document.body.style.overflow = '';
-            
-            // Clean up progress simulation
-            this.stopProgressSimulation();
-            
-            this.log('Spinner hidden', 'debug');
         }
+        
+        document.body.style.overflow = '';
+        
+        // Reset operation state
+        this.operationStartTime = null;
+        
+        this.log('Spinner hidden', 'debug');
     }
 
     // ============================================================================
