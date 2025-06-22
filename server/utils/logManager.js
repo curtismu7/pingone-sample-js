@@ -72,18 +72,18 @@ class LogManager {
 
     logServerStartup() {
         const port = process.env.PORT || 3002;
-        
         // Log server startup header
+        this.logStructured('\n********** SERVER STARTUP **********');
         this.logStructured(`Started server on port ${port}`);
-        
         // Log library initialization status
         this.logLibraryStatus();
+        this.logStructured('************************************\n');
     }
 
     logLibraryStatus() {
         // Log libraries being loaded
+        this.logStructured('\n**** LIBRARIES ****');
         this.logStructured('Loaded libraries: uDSV, Tippy.js, Popper.js');
-        
         const libraries = [
             { name: 'Winston (Logging)', status: 'OK' },
             { name: 'Express.js', status: 'OK' },
@@ -92,13 +92,12 @@ class LogManager {
             { name: 'PapaCSV (CSV Parser)', status: 'OK' },
             { name: 'CORS Middleware', status: 'OK' }
         ];
-
         libraries.forEach(lib => {
-            this.logStructured(`Loaded ${lib.name}: ${lib.status}`);
+            this.logStructured(`  - ${lib.name}: ${lib.status}`);
         });
-        
         // Log token configuration
         this.logStructured('TOKEN CONFIG: Cache=50min, Buffer=2min, MaxAge=60min');
+        this.logStructured('***********************\n');
     }
 
     logStructured(message) {
@@ -177,19 +176,23 @@ class LogManager {
 
     // Enhanced logging methods for specific activities
     logWorkerTokenRequested() {
+        this.logStructured('\n*** TOKEN EVENT ***');
         this.logStructured('Requested worker token');
     }
 
     logWorkerTokenReceived(expiresInMinutes = 55) {
-        this.logStructured(`Worker token received (expires in ${expiresInMinutes} minutes) ✅`);
+        this.logStructured('Worker token received (expires in ' + expiresInMinutes + ' minutes) ✅');
+        this.logStructured('********************\n');
     }
 
     logWorkerTokenFailed() {
         this.logStructured('Worker token request failed ❌');
+        this.logStructured('********************\n');
     }
 
     logWorkerTokenReused(timeRemaining) {
-        this.logStructured(`Worker token reused from cache (${timeRemaining} remaining).`);
+        this.logStructured('Worker token reused from cache (' + timeRemaining + ' remaining).');
+        this.logStructured('********************\n');
     }
 
     logFileSelected(filename, recordCount) {
@@ -197,6 +200,8 @@ class LogManager {
     }
 
     logActionStarted(action, recordCount = null) {
+        // Add operation start separator
+        this.logStructured(`\n===== ${action.toUpperCase()} OPERATION START =====`);
         if (recordCount) {
             this.logStructured(`${action} started – action: ${action} (${recordCount} records)`);
         } else {
@@ -205,14 +210,17 @@ class LogManager {
     }
 
     logActionComplete(action, successCount, skippedCount = 0, failedCount = 0) {
+        // Add operation end separator
         let message = `Action complete – ${action}: ${successCount}`;
         if (skippedCount > 0) message += `, Skipped: ${skippedCount}`;
         if (failedCount > 0) message += `, Failed: ${failedCount}`;
         message += ' ✅';
         this.logStructured(message);
+        this.logStructured(`===== ${action.toUpperCase()} OPERATION END =====\n`);
     }
 
     logImportOperation(successCount, totalCount, duration) {
+        this.logStructured('**** TOTALS (IMPORT) ****');
         this.logStructured(`IMPORT OPERATION COMPLETE: ${successCount}/${totalCount} users imported successfully in ${duration}ms`);
         this.info('Import operation summary', {
             totalRecords: totalCount,
@@ -222,9 +230,11 @@ class LogManager {
             duration: `${duration}ms`,
             successRate: `${Math.round((successCount / totalCount) * 100)}%`
         });
+        this.logStructured('**************************\n');
     }
 
     logModifyOperation(successCount, totalCount, duration) {
+        this.logStructured('**** TOTALS (MODIFY) ****');
         this.logStructured(`MODIFY OPERATION COMPLETE: ${successCount}/${totalCount} users modified successfully in ${duration}ms`);
         this.info('Modify operation summary', {
             totalRecords: totalCount,
@@ -234,9 +244,11 @@ class LogManager {
             duration: `${duration}ms`,
             successRate: `${Math.round((successCount / totalCount) * 100)}%`
         });
+        this.logStructured('**************************\n');
     }
 
     logDeleteOperation(successCount, totalCount, notFoundCount = 0, duration) {
+        this.logStructured('**** TOTALS (DELETE) ****');
         this.logStructured(`DELETE OPERATION COMPLETE: ${successCount}/${totalCount} users deleted successfully in ${duration}ms`);
         this.info('Delete operation summary', {
             totalRecords: totalCount,
@@ -247,6 +259,7 @@ class LogManager {
             duration: `${duration}ms`,
             successRate: `${Math.round((successCount / totalCount) * 100)}%`
         });
+        this.logStructured('**************************\n');
     }
 
     logUserAction(action, details) {

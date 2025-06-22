@@ -1353,4 +1353,30 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     color: var(--text-secondary);
     font-size: 0.8rem;
     margin-top: 0.25rem;
+}
+
+/* Spinner footer button container */
+.spinner-footer-btn-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 2rem;
+}
+.spinner-footer-btn-container.hidden {
+    display: none !important;
+}
+.close-btn {
+    background-color: var(--ping-red);
+    color: var(--ping-white);
+    border: none;
+    padding: 0.75rem 2.5rem;
+    border-radius: 6px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.close-btn:hover {
+    background-color: var(--ping-red-hover);
 } 

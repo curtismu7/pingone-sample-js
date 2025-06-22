@@ -440,15 +440,20 @@ class Utils {
         // DEBUG: Check if spinner container exists in DOM
         if (!document.getElementById('spinner-overlay')) {
             const spinnerHTML = `
-                <div id="spinner-overlay" class="spinner-overlay hidden">
+                <div id="spinner-overlay" class="spinner-overlay spinner hidden">
                     <div class="spinner-container">
                         <div class="spinner-content">
                             <div class="spinner-header">
                                 <h3 id="spinner-title">Loading...</h3>
-                                <button id="spinner-cancel" class="cancel-btn">Cancel</button>
+                                <div id="spinner-header-btn-container">
+                                    <button id="spinner-cancel" class="cancel-btn">Cancel</button>
+                                </div>
                             </div>
                             <div id="spinner-steps" class="spinner-steps"></div>
                             <div id="spinner-progress" class="spinner-progress hidden"></div>
+                            <div id="spinner-footer-btn-container" class="spinner-footer-btn-container hidden">
+                                <button id="spinner-close" class="close-btn">Close</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -458,6 +463,9 @@ class Utils {
             // Setup cancel button
             document.getElementById('spinner-cancel').addEventListener('click', () => {
                 this.cancelCurrentOperation();
+            });
+            document.getElementById('spinner-close').addEventListener('click', () => {
+                this.hideSpinner();
             });
         }
     }
@@ -516,6 +524,13 @@ class Utils {
         steps.style.display = 'block';
         steps.innerHTML = ''; // Clear previous steps
         progress.classList.add('hidden');
+        
+        // Reset button to Cancel in header
+        const headerBtn = document.getElementById('spinner-header-btn-container');
+        const footerBtn = document.getElementById('spinner-footer-btn-container');
+        if (headerBtn) headerBtn.classList.remove('hidden');
+        if (footerBtn) footerBtn.classList.add('hidden');
+        document.getElementById('spinner-cancel').textContent = 'Cancel';
         
         spinner.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
@@ -705,6 +720,12 @@ class Utils {
             progressElement.classList.add('hidden');
         }
         
+        // Move button to footer and change to Close
+        const headerBtn = document.getElementById('spinner-header-btn-container');
+        const footerBtn = document.getElementById('spinner-footer-btn-container');
+        if (headerBtn) headerBtn.classList.add('hidden');
+        if (footerBtn) footerBtn.classList.remove('hidden');
+        
         this.log('Operation spinner completed', 'debug', { successCount, failedCount });
     }
 
@@ -717,6 +738,12 @@ class Utils {
             stepElement.querySelector('.step-text').textContent = `❌ Operation failed: ${error}`;
             stepElement.className = 'spinner-step error';
         }
+        
+        // Move button to footer and change to Close
+        const headerBtn = document.getElementById('spinner-header-btn-container');
+        const footerBtn = document.getElementById('spinner-footer-btn-container');
+        if (headerBtn) headerBtn.classList.add('hidden');
+        if (footerBtn) footerBtn.classList.remove('hidden');
         
         this.log('Operation spinner failed', 'error', { stepId, error });
     }
