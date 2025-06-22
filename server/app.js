@@ -127,10 +127,12 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 // Exception handlers
 process.on('uncaughtException', (error) => {
     logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
+    console.error('Uncaught Exception:', error.stack || error);
     process.exit(1);
 });
 process.on('unhandledRejection', (reason, promise) => {
     logger.error('Unhandled Rejection', { reason });
+    console.error('Unhandled Rejection:', reason && reason.stack ? reason.stack : reason);
     process.exit(1);
 });
 

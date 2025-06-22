@@ -13,6 +13,42 @@ const { getWorkerToken } = require('./token');
 
 const router = express.Router();
 
+// Store active SSE connections
+const sseConnections = new Map();
+
+// SSE endpoint for progress updates
+router.get('/progress/:operationId', (req, res) => {
+    const { operationId } = req.params;
+    
+    // Set SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Store connection
+    sseConnections.set(operationId, res);
+
+    // Send initial connection message
+    res.write(`data: ${JSON.stringify({ type: 'connected', operationId })}\n\n`);
+
+    // Handle client disconnect
+    req.on('close', () => {
+        sseConnections.delete(operationId);
+    });
+});
+
+// Helper function to send progress updates
+function sendProgressUpdate(operationId, data) {
+    const connection = sseConnections.get(operationId);
+    if (connection) {
+        connection.write(`data: ${JSON.stringify(data)}\n\n`);
+    }
+}
+
 // Configure multer for file uploads
 // DEBUG: If file uploads fail, check upload directory permissions and file size limits
 const storage = multer.diskStorage({
@@ -48,6 +84,7 @@ const upload = multer({
 // DEBUG: This endpoint handles file uploads - check multipart/form-data content type
 router.post('/', upload.single('csv'), async (req, res) => {
     const startTime = Date.now();
+    const operationId = `csv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     try {
         // Validate file upload
@@ -66,10 +103,21 @@ router.post('/', upload.single('csv'), async (req, res) => {
             });
         }
 
+        // Send initial progress update
+        sendProgressUpdate(operationId, {
+            type: 'progress',
+            current: 0,
+            total: 0,
+            success: 0,
+            errors: 0,
+            message: 'Reading CSV file...'
+        });
+
         logManager.info('Starting CSV import', {
             filename: req.file.originalname,
             size: req.file.size,
-            environmentId
+            environmentId,
+            operationId
         });
         
         logManager.logUserAction('file_upload', {
@@ -92,6 +140,17 @@ router.post('/', upload.single('csv'), async (req, res) => {
         }
 
         const users = parseResult.data;
+        
+        // Send parsing complete update
+        sendProgressUpdate(operationId, {
+            type: 'progress',
+            current: 0,
+            total: users.length,
+            success: 0,
+            errors: 0,
+            message: `CSV parsed: ${users.length} records found`
+        });
+
         logManager.info('CSV parsed successfully', { 
             recordCount: users.length,
             headers: Object.keys(users[0] || {})
@@ -105,6 +164,15 @@ router.post('/', upload.single('csv'), async (req, res) => {
 
         // Get worker token for PingOne API authentication
         // DEBUG: If token request fails, check credentials and PingOne connectivity
+        sendProgressUpdate(operationId, {
+            type: 'progress',
+            current: 0,
+            total: users.length,
+            success: 0,
+            errors: 0,
+            message: 'Getting authentication token...'
+        });
+
         const token = await getWorkerToken(environmentId, clientId, clientSecret);
         const defaultPopulationId = await getDefaultPopulation(environmentId, token);
 
@@ -155,6 +223,16 @@ router.post('/', upload.single('csv'), async (req, res) => {
                 errorCount++;
             }
 
+            // Send real-time progress update
+            sendProgressUpdate(operationId, {
+                type: 'progress',
+                current: i + 1,
+                total: users.length,
+                success: successCount,
+                errors: errorCount,
+                message: `Processing user ${i + 1} of ${users.length}`
+            });
+
             // Log progress every 10 users to track performance
             if ((i + 1) % 10 === 0) {
                 logManager.info('Import progress', {
@@ -170,6 +248,17 @@ router.post('/', upload.single('csv'), async (req, res) => {
         fs.unlinkSync(req.file.path);
 
         const duration = Date.now() - startTime;
+        
+        // Send completion update
+        sendProgressUpdate(operationId, {
+            type: 'complete',
+            current: users.length,
+            total: users.length,
+            success: successCount,
+            errors: errorCount,
+            duration: duration,
+            message: 'Import completed'
+        });
         
         // Enhanced totals logging
         logManager.info('IMPORT TOTALS - CSV Import Completed', {
@@ -199,6 +288,7 @@ router.post('/', upload.single('csv'), async (req, res) => {
             results,
             successCount,
             errorCount,
+            operationId,
             summary: {
                 total: users.length,
                 successful: successCount,
@@ -208,6 +298,13 @@ router.post('/', upload.single('csv'), async (req, res) => {
         });
 
     } catch (error) {
+        // Send error update
+        sendProgressUpdate(operationId, {
+            type: 'error',
+            message: error.message,
+            error: true
+        });
+
         logManager.error('CSV import error', {
             error: error.message,
             stack: error.stack,
@@ -221,7 +318,8 @@ router.post('/', upload.single('csv'), async (req, res) => {
 
         res.status(500).json({
             error: 'Failed to import users',
-            details: error.message
+            details: error.message,
+            operationId
         });
     }
 });
@@ -230,6 +328,7 @@ router.post('/', upload.single('csv'), async (req, res) => {
 // DEBUG: This endpoint handles direct JSON data - check request body structure
 router.post('/bulk', async (req, res) => {
     const startTime = Date.now();
+    const operationId = `bulk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     try {
         const { users, environmentId, clientId, clientSecret } = req.body;
@@ -242,9 +341,20 @@ router.post('/bulk', async (req, res) => {
             });
         }
 
+        // Send initial progress update
+        sendProgressUpdate(operationId, {
+            type: 'progress',
+            current: 0,
+            total: users.length,
+            success: 0,
+            errors: 0,
+            message: 'Starting bulk import...'
+        });
+
         logManager.info('Starting bulk import from JSON data', {
             recordCount: users.length,
-            environmentId
+            environmentId,
+            operationId
         });
 
         logManager.logUserAction('operation_start', {
@@ -253,6 +363,15 @@ router.post('/bulk', async (req, res) => {
         });
 
         // Get worker token for authentication
+        sendProgressUpdate(operationId, {
+            type: 'progress',
+            current: 0,
+            total: users.length,
+            success: 0,
+            errors: 0,
+            message: 'Getting authentication token...'
+        });
+
         const token = await getWorkerToken(environmentId, clientId, clientSecret);
         const defaultPopulationId = await getDefaultPopulation(environmentId, token);
 
@@ -299,6 +418,16 @@ router.post('/bulk', async (req, res) => {
                 errorCount++;
             }
 
+            // Send real-time progress update
+            sendProgressUpdate(operationId, {
+                type: 'progress',
+                current: i + 1,
+                total: users.length,
+                success: successCount,
+                errors: errorCount,
+                message: `Processing user ${i + 1} of ${users.length}`
+            });
+
             // Progress logging
             if ((i + 1) % 10 === 0) {
                 logManager.info('Bulk import progress', {
@@ -311,6 +440,18 @@ router.post('/bulk', async (req, res) => {
         }
 
         const duration = Date.now() - startTime;
+        
+        // Send completion update
+        sendProgressUpdate(operationId, {
+            type: 'complete',
+            current: users.length,
+            total: users.length,
+            success: successCount,
+            errors: errorCount,
+            duration: duration,
+            message: 'Import completed'
+        });
+
         logManager.info('Bulk import completed', {
             totalRecords: users.length,
             successCount,
@@ -328,6 +469,7 @@ router.post('/bulk', async (req, res) => {
             results,
             successCount,
             errorCount,
+            operationId,
             summary: {
                 total: users.length,
                 successful: successCount,
@@ -337,6 +479,13 @@ router.post('/bulk', async (req, res) => {
         });
 
     } catch (error) {
+        // Send error update
+        sendProgressUpdate(operationId, {
+            type: 'error',
+            message: error.message,
+            error: true
+        });
+
         logManager.error('Bulk import error', {
             error: error.message,
             stack: error.stack
@@ -344,7 +493,8 @@ router.post('/bulk', async (req, res) => {
 
         res.status(500).json({
             error: 'Failed to import users',
-            details: error.message
+            details: error.message,
+            operationId
         });
     }
 });

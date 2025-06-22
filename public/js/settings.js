@@ -2,17 +2,32 @@
 
 class SettingsPage {
     constructor() {
-        this.init();
+        // Only initialize if we're on the settings page
+        if (this.isSettingsPage()) {
+            this.init();
+        }
+    }
+
+    isSettingsPage() {
+        // Check if we're on the settings page by looking for settings-specific elements
+        return document.getElementById('environment-id') !== null;
     }
 
     async init() {
+        console.log('SettingsPage.init() started');
         await this.waitForUtils();
+        console.log('Utils are available');
+        await this.waitForDOM();
+        console.log('DOM is ready');
+        await this.waitForTippy();
+        console.log('Tippy.js is available');
         this.setupEventListeners();
         this.loadSettings();
         this.startTokenStatusCheck();
         this.initializeTooltips();
         this.updateDefaultFileDisplay();
         utils.log('Settings page initialized', 'info');
+        console.log('SettingsPage.init() finished');
     }
 
     async waitForUtils() {
@@ -21,19 +36,40 @@ class SettingsPage {
         }
     }
 
+    async waitForDOM() {
+        // Wait for DOM to be fully loaded
+        if (document.readyState === 'loading') {
+            await new Promise(resolve => {
+                document.addEventListener('DOMContentLoaded', resolve);
+            });
+        }
+        
+        // Additional wait to ensure all elements are available
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    async waitForTippy() {
+        // Wait for Tippy.js to be available
+        while (typeof window.tippy === 'undefined') {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+
     initializeTooltips() {
         // Initialize Tippy.js tooltips for all elements with data-tippy-content
         const tooltipElements = document.querySelectorAll('[data-tippy-content]');
         tooltipElements.forEach(element => {
-            tippy(element, {
-                content: element.getAttribute('data-tippy-content'),
-                placement: 'top',
-                arrow: true,
-                theme: 'light',
-                animation: 'scale',
-                duration: [200, 150],
-                maxWidth: 250
-            });
+            if (typeof window.tippy !== 'undefined') {
+                tippy(element, {
+                    content: element.getAttribute('data-tippy-content'),
+                    placement: 'top',
+                    arrow: true,
+                    theme: 'light',
+                    animation: 'scale',
+                    duration: [200, 150],
+                    maxWidth: 250
+                });
+            }
         });
     }
 
@@ -199,13 +235,20 @@ class SettingsPage {
     }
 
     populateFormFields(settings) {
-        // Credentials
-        document.getElementById('environment-id').value = settings.environmentId || '';
-        document.getElementById('client-id').value = settings.clientId || '';
-        document.getElementById('client-secret').value = settings.clientSecret || '';
-        document.getElementById('base-url').value = settings.baseUrl || 'https://api.pingone.com';
-        document.getElementById('save-credentials').checked = settings.saveCredentials === true;
-        document.getElementById('use-client-secret').checked = settings.useClientSecret !== false; // Default to true
+        // Credentials - with null checks
+        const envIdEl = document.getElementById('environment-id');
+        const clientIdEl = document.getElementById('client-id');
+        const clientSecretEl = document.getElementById('client-secret');
+        const baseUrlEl = document.getElementById('base-url');
+        const saveCredentialsEl = document.getElementById('save-credentials');
+        const useClientSecretEl = document.getElementById('use-client-secret');
+
+        if (envIdEl) envIdEl.value = settings.environmentId || '';
+        if (clientIdEl) clientIdEl.value = settings.clientId || '';
+        if (clientSecretEl) clientSecretEl.value = settings.clientSecret || '';
+        if (baseUrlEl) baseUrlEl.value = settings.baseUrl || 'https://api.pingone.com';
+        if (saveCredentialsEl) saveCredentialsEl.checked = settings.saveCredentials === true;
+        if (useClientSecretEl) useClientSecretEl.checked = settings.useClientSecret !== false; // Default to true
 
         // App settings
         if (settings.defaultFileName) {
@@ -288,8 +331,7 @@ class SettingsPage {
 
             if (testResult.success) {
                 this.updateTokenStatus('valid', `✓ Credentials are valid - Environment: ${testResult.environment.name}`);
-                utils.logStructured(`Credentials test successful for environment ${currentCreds.environmentId.substring(0, 8)}...`);
-                
+                utils.log(`Credentials test successful for environment ${currentCreds.environmentId.substring(0, 8)}...`, 'info');
                 // Clear any cached token to force fresh authentication
                 utils.clearTokenCache();
             } else {
@@ -299,8 +341,7 @@ class SettingsPage {
         } catch (error) {
             const errorMessage = error.message || 'An unknown error occurred';
             this.updateTokenStatus('expired', `✗ ${errorMessage}`);
-            utils.logStructured(`Credentials test failed: ${errorMessage}`);
-            
+            utils.log(`Credentials test failed: ${errorMessage}`, 'error');
             // Log detailed error information
             utils.log('Credentials test failed', 'error', {
                 error: errorMessage,
@@ -448,27 +489,13 @@ class SettingsPage {
     }
 
     updateLoggingStatus(isLogging, status = null) {
-        const statusElement = document.getElementById('logging-status');
-        if (statusElement) {
-            const statusValue = statusElement.querySelector('.status-value');
-            const statusIcon = statusElement.querySelector('.status-icon');
-            
-            if (statusValue && statusIcon) {
-                if (status === 'empty') {
-                    statusValue.textContent = 'Empty';
-                    statusIcon.textContent = '⚠';
-                    statusElement.className = 'status-display empty';
-                } else {
-                    statusValue.textContent = isLogging ? 'Active' : 'Inactive';
-                    statusIcon.textContent = isLogging ? '✓' : '✗';
-                    statusElement.className = isLogging ? 'status-display active' : 'status-display inactive';
-                }
-            }
+        const statusEl = document.getElementById('logging-status-value');
+        if (statusEl) {
+            statusEl.textContent = status || (isLogging ? 'Active' : 'Inactive');
+            statusEl.className = `status-value ${isLogging ? 'active' : 'inactive'}`;
         }
     }
 }
 
-// Initialize the settings page when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.settingsPage = new SettingsPage();
-}); 
+// Initialize the settings page logic
+new SettingsPage(); 

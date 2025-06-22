@@ -20,6 +20,13 @@ class Utils {
         this.progressInterval = null;
         this.progressSimulationActive = false;
         
+        // Abort controller for cancelling operations
+        this.currentOperationController = null;
+        
+        // SSE connection for real-time progress
+        this.sseConnection = null;
+        this.currentOperationId = null;
+
         this.init();
     }
 
@@ -454,7 +461,11 @@ class Utils {
                                         <div id="spinner-subtitle" class="spinner-subtitle">Initializing...</div>
                                     </div>
                                 </div>
+                                <div id="spinner-header-btn-container" class="spinner-header-actions">
+                                    <button id="spinner-cancel" class="cancel-btn">Cancel Operation</button>
+                                </div>
                             </div>
+
                             <!-- Operation Details Section -->
                             <div id="spinner-details" class="spinner-details">
                                 <div class="operation-info">
@@ -480,6 +491,7 @@ class Utils {
                                     </div>
                                 </div>
                             </div>
+
                             <!-- Progress Section -->
                             <div id="spinner-progress-section" class="spinner-progress-section">
                                 <div class="progress-header">
@@ -493,8 +505,27 @@ class Utils {
                                 </div>
                                 <div id="spinner-progress" class="spinner-progress hidden"></div>
                             </div>
+
+                            <!-- Real-time Stats Section -->
+                            <div id="spinner-stats" class="spinner-stats">
+                                <div class="stats-header">
+                                    <span class="stats-label">Current Status</span>
+                                </div>
+                                <div class="stats-content">
+                                    <div class="stats-row">
+                                        <span class="stats-label">Success:</span>
+                                        <span class="stats-value success">0</span>
+                                    </div>
+                                    <div class="stats-row">
+                                        <span class="stats-label">Errors:</span>
+                                        <span class="stats-value error">0</span>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Steps Section -->
                             <div id="spinner-steps" class="spinner-steps"></div>
+
                             <!-- Status Summary -->
                             <div id="spinner-status-summary" class="spinner-status-summary hidden">
                                 <div class="status-summary-header">
@@ -515,9 +546,9 @@ class Utils {
                                     </div>
                                 </div>
                             </div>
+
                             <!-- Footer Section -->
                             <div id="spinner-footer-btn-container" class="spinner-footer-btn-container hidden">
-                                <button id="spinner-cancel" class="cancel-btn">Cancel Operation</button>
                                 <button id="spinner-close" class="close-btn">Close</button>
                             </div>
                         </div>
@@ -525,7 +556,8 @@ class Utils {
                 </div>
             `;
             document.body.insertAdjacentHTML('beforeend', spinnerHTML);
-            // Setup cancel button in footer
+
+            // Setup cancel button
             document.getElementById('spinner-cancel').addEventListener('click', () => {
                 this.cancelCurrentOperation();
             });
@@ -536,11 +568,11 @@ class Utils {
     }
 
     cancelCurrentOperation() {
-        // Cancel current operation and hide spinner
-        // DEBUG: Call this function to stop long-running operations
-        this.stopProgressSimulation();
-        this.hideSpinner();
-        this.log('Operation cancelled by user', 'info');
+        if (this.currentOperationController) {
+            this.log('User cancelled operation', 'warn');
+            this.currentOperationController.abort();
+            this.failOperationSpinner('step-processing', 'Operation cancelled by user.');
+        }
     }
 
     showSpinner(text = 'Loading...', showSteps = false) {
@@ -567,6 +599,12 @@ class Utils {
     }
 
     showOperationSpinner(message, fileName = null, operationType = null, recordCount = null) {
+        // Create a new AbortController for this operation
+        this.currentOperationController = new AbortController();
+
+        this.showSpinner(message, true);
+        this.startSpinnerAnimation();
+        
         // Show enhanced spinner for operations with workflow steps
         // DEBUG: Use this for complex operations that need step-by-step progress
         const spinner = document.getElementById('spinner-overlay');
@@ -599,19 +637,15 @@ class Utils {
         const headerBtn = document.getElementById('spinner-header-btn-container');
         const footerBtn = document.getElementById('spinner-footer-btn-container');
         const statusSummary = document.getElementById('spinner-status-summary');
-        if (headerBtn) headerBtn.classList.add('hidden');
-        if (footerBtn) footerBtn.classList.remove('hidden');
+        if (headerBtn) headerBtn.classList.remove('hidden');
+        if (footerBtn) footerBtn.classList.add('hidden');
         if (statusSummary) statusSummary.classList.add('hidden');
-        document.getElementById('spinner-cancel').style.display = 'inline-block';
-        document.getElementById('spinner-close').style.display = 'none';
+        document.getElementById('spinner-cancel').textContent = 'Cancel Operation';
         
         // Start operation timer
         this.operationStartTime = Date.now();
         this.updateElapsedTime();
         this.elapsedTimer = setInterval(() => this.updateElapsedTime(), 1000);
-        
-        // Start spinner animation
-        this.startSpinnerAnimation();
         
         spinner.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
@@ -786,16 +820,13 @@ class Utils {
         this.log('Finalizing step added', 'debug', { successCount, errorCount, operation });
     }
 
-    startProgressSimulation(totalRecords, estimatedDurationMs, fileName = null) {
+    startProgressSimulation(totalRecords, estimatedDurationMs = 10000, fileName = null) {
         // Start progress simulation for operations
         // DEBUG: Check if progress updates are called with correct parameters
         this.stopProgressSimulation();
         this.progressSimulationActive = true;
-        // Dynamically set estimatedDurationMs if not provided
-        if (!estimatedDurationMs) {
-            // 300ms per record, capped at 90 seconds
-            estimatedDurationMs = Math.min(totalRecords * 300, 90000);
-        }
+        
+        // Calculate dynamic increment based on record count
         let incrementPerUpdate;
         if (totalRecords <= 10) {
             incrementPerUpdate = 1;
@@ -808,38 +839,36 @@ class Utils {
         } else {
             incrementPerUpdate = 100;
         }
+
         const totalUpdates = Math.ceil(totalRecords / incrementPerUpdate);
         const timePerUpdate = estimatedDurationMs / totalUpdates;
         let currentProgress = 0;
-        let simulatedSuccess = 0;
-        let simulatedFailed = 0;
+
         this.progressInterval = setInterval(() => {
             if (!this.progressSimulationActive) return;
+
             currentProgress = Math.min(currentProgress + incrementPerUpdate, totalRecords);
-            // Simulate success/fail (all success for now)
-            simulatedSuccess = currentProgress;
-            simulatedFailed = 0;
-            // Update progress bar and percentage
+            
+            // Update progress bar
             this.updateProgress(currentProgress, totalRecords);
+            
             // Update processing step text
             const stepElement = document.getElementById('step-processing');
             if (stepElement) {
                 const stepText = `🔢 Processing records: ${currentProgress.toLocaleString()}/${totalRecords.toLocaleString()}`;
                 stepElement.querySelector('.step-text').textContent = stepText;
             }
+            
             // Update subtitle
             this.updateSpinnerSubtitle(`Processing ${currentProgress.toLocaleString()} of ${totalRecords.toLocaleString()} records...`);
-            // Update stats in real time
-            const successElement = document.getElementById('summary-success');
-            const failedElement = document.getElementById('summary-failed');
-            if (successElement) successElement.textContent = simulatedSuccess.toLocaleString();
-            if (failedElement) failedElement.textContent = simulatedFailed.toLocaleString();
+
             if (currentProgress >= totalRecords) {
                 this.stopProgressSimulation();
             }
         }, timePerUpdate);
-        this.log('Progress simulation started', 'debug', {
-            totalRecords,
+        
+        this.log('Progress simulation started', 'debug', { 
+            totalRecords, 
             estimatedDurationMs,
             fileName,
             incrementPerUpdate,
@@ -857,27 +886,6 @@ class Utils {
         }
     }
 
-    stopSpinnerAnimation() {
-        // Stop the spinner icon animation
-        const spinnerIcon = document.querySelector('.spinner-icon');
-        if (spinnerIcon) {
-            spinnerIcon.style.animation = 'none';
-            // Add a subtle transition to show completion
-            spinnerIcon.style.transition = 'all 0.3s ease';
-            spinnerIcon.style.borderTopColor = '#10b981'; // Green color to indicate success
-        }
-    }
-
-    startSpinnerAnimation() {
-        // Start the spinner icon animation
-        const spinnerIcon = document.querySelector('.spinner-icon');
-        if (spinnerIcon) {
-            spinnerIcon.style.animation = 'spin 1s linear infinite';
-            spinnerIcon.style.transition = 'none';
-            spinnerIcon.style.borderTopColor = 'white'; // Reset to default color
-        }
-    }
-
     updateSpinnerProgress(current, total, action = 'Processing') {
         // Update spinner progress display
         const progressElement = document.getElementById('spinner-progress');
@@ -891,7 +899,6 @@ class Utils {
         // Complete operation spinner with final results
         this.stopProgressSimulation();
         this.stopElapsedTimer();
-        this.stopSpinnerAnimation(); // Stop the spinner animation
         
         // Update final step
         const stepElement = document.getElementById('step-processing');
@@ -919,18 +926,18 @@ class Utils {
         if (headerBtn) headerBtn.classList.add('hidden');
         if (footerBtn) footerBtn.classList.remove('hidden');
         
-        document.getElementById('spinner-cancel').style.display = 'none';
-        document.getElementById('spinner-close').style.display = 'inline-block';
-        
         this.log('Operation spinner completed', 'debug', { successCount, failedCount });
     }
 
     failOperationSpinner(stepId, error) {
-        // Mark operation spinner as failed
         this.stopProgressSimulation();
         this.stopElapsedTimer();
-        this.stopSpinnerAnimation(); // Stop the spinner animation
-        
+
+        // Ensure endTime is set before formatting to prevent errors
+        if (!this.endTime) {
+            this.endTime = new Date();
+        }
+
         const stepElement = document.getElementById(stepId);
         if (stepElement) {
             stepElement.querySelector('.step-text').textContent = `❌ Operation failed: ${error}`;
@@ -940,7 +947,7 @@ class Utils {
         // Update subtitle
         this.updateSpinnerSubtitle('Operation failed');
         
-        // Show status summary with 0 success, 1 failed (or use real counts if available)
+        // Show status summary with 0 success
         this.showStatusSummary(0, 1);
         
         // Move button to footer and change to Close
@@ -948,14 +955,6 @@ class Utils {
         const footerBtn = document.getElementById('spinner-footer-btn-container');
         if (headerBtn) headerBtn.classList.add('hidden');
         if (footerBtn) footerBtn.classList.remove('hidden');
-        
-        // Ensure spinner overlay stays visible until user closes it
-        const spinner = document.getElementById('spinner-overlay');
-        if (spinner) spinner.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-        
-        document.getElementById('spinner-cancel').style.display = 'none';
-        document.getElementById('spinner-close').style.display = 'inline-block';
         
         this.log('Operation spinner failed', 'debug', { stepId, error });
     }
@@ -990,25 +989,33 @@ class Utils {
     }
 
     hideSpinner() {
-        // Hide spinner and reset state
-        // DEBUG: If spinner doesn't hide, check CSS classes and DOM structure
-        this.stopProgressSimulation();
-        this.stopElapsedTimer();
+        // Disconnect SSE when hiding spinner
+        this.disconnectProgress();
         
-        // Don't reset animation state here - let it stay stopped if operation completed
-        // The animation will be reset when showOperationSpinner is called for the next operation
-        
+        // Hide the spinner overlay
         const spinner = document.getElementById('spinner-overlay');
         if (spinner) {
             spinner.classList.add('hidden');
+            this.stopSpinnerAnimation();
         }
         
-        document.body.style.overflow = '';
-        
-        // Reset operation state
-        this.operationStartTime = null;
-        
         this.log('Spinner hidden', 'debug');
+    }
+
+    startSpinnerAnimation() {
+        // Start the spinner icon animation
+        const spinnerIcon = document.querySelector('.spinner-icon');
+        if (spinnerIcon) {
+            spinnerIcon.classList.add('spinning');
+        }
+    }
+
+    stopSpinnerAnimation() {
+        // Stop the spinner icon animation
+        const spinnerIcon = document.querySelector('.spinner-icon');
+        if (spinnerIcon) {
+            spinnerIcon.classList.remove('spinning');
+        }
     }
 
     // ============================================================================
@@ -1083,22 +1090,165 @@ class Utils {
         // Centralized error handling
         // DEBUG: All application errors should go through this function
         const errorMessage = error.message || 'Unknown error occurred';
-        this.log(errorMessage, 'error', { context });
+        const errorContext = context ? ` in ${context}` : '';
+        
+        this.log(`Error${errorContext}: ${errorMessage}`, 'error', {
+            context,
+            stack: error.stack,
+            error: error
+        });
+
+        // Show user-friendly error message
+        this.showModal('Error', `An error occurred${errorContext}: ${errorMessage}`, {
+            showCancel: false,
+            confirmText: 'OK'
+        });
+    }
+
+    async makeRequest(url, options = {}) {
+        // Enhanced fetch wrapper with error handling and logging
+        // DEBUG: Use this for all API requests to get consistent error handling
+        const requestId = Math.random().toString(36).substr(2, 9);
+        
+        this.log('Making API request', 'debug', {
+            requestId,
+            url,
+            method: options.method || 'GET',
+            hasBody: !!options.body
+        });
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                ...options
+            });
+
+            this.log('API response received', 'debug', {
+                requestId,
+                url,
+                status: response.status,
+                statusText: response.statusText
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: response.statusText }));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data;
+
+        } catch (error) {
+            this.log('API request failed', 'error', {
+                requestId,
+                url,
+                error: error.message
+            });
+            throw error;
+        }
+    }
+
+    setupSidebar() {
+        // Setup sidebar functionality (placeholder)
+        // DEBUG: Add sidebar-specific initialization here
+        this.log('Sidebar setup completed', 'debug');
+    }
+
+    // Connect to SSE for real-time progress updates
+    connectToProgress(operationId) {
+        if (this.sseConnection) {
+            this.sseConnection.close();
+        }
+
+        this.currentOperationId = operationId;
+        this.sseConnection = new EventSource(`/api/import/progress/${operationId}`);
+        
+        this.sseConnection.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                this.handleProgressUpdate(data);
+            } catch (error) {
+                this.log('Error parsing SSE data', 'error', { error: error.message });
+            }
+        };
+
+        this.sseConnection.onerror = (error) => {
+            this.log('SSE connection error', 'error', { error });
+        };
+    }
+
+    // Handle real-time progress updates from backend
+    handleProgressUpdate(data) {
+        switch (data.type) {
+            case 'connected':
+                this.log('SSE connected', 'debug', { operationId: data.operationId });
+                break;
+                
+            case 'progress':
+                this.updateSpinnerProgress(data.current, data.total, data.message);
+                this.updateSpinnerSubtitle(data.message);
+                
+                // Update success/error counts if available
+                if (data.success !== undefined && data.errors !== undefined) {
+                    this.updateSpinnerStats(data.success, data.errors);
+                }
+                break;
+                
+            case 'complete':
+                this.updateSpinnerProgress(data.current, data.total, data.message);
+                this.updateSpinnerSubtitle(data.message);
+                this.stopSpinnerAnimation();
+                
+                // Show completion summary
+                setTimeout(() => {
+                    this.completeOperationSpinner(data.success, data.errors);
+                }, 1000);
+                break;
+                
+            case 'error':
+                this.failOperationSpinner('step-processing', data.message);
+                break;
+        }
+    }
+
+    // Update spinner statistics
+    updateSpinnerStats(success, errors) {
+        const statsElement = document.getElementById('spinner-stats');
+        if (statsElement) {
+            statsElement.innerHTML = `
+                <div class="stats-row">
+                    <span class="stats-label">Success:</span>
+                    <span class="stats-value success">${success}</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Errors:</span>
+                    <span class="stats-value error">${errors}</span>
+                </div>
+            `;
+        }
+    }
+
+    // Disconnect SSE connection
+    disconnectProgress() {
+        if (this.sseConnection) {
+            this.sseConnection.close();
+            this.sseConnection = null;
+        }
+        this.currentOperationId = null;
     }
 }
 
 // Initialize utils when DOM is loaded
+// DEBUG: If utils aren't available globally, check this initialization
 document.addEventListener('DOMContentLoaded', () => {
     window.utils = new Utils();
-    window.utils.init().then(() => {
-        window.utils.setupSpinner(); // Initialize spinner system
-        console.log('Utils initialized and available globally as window.utils');
-    }).catch(error => {
-        console.error('Failed to initialize utils:', error);
-    });
+    console.log('Utils initialized and available globally as window.utils');
 });
 
 // Export for module usage
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Utils;
-}
+} 
