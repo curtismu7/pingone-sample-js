@@ -103,14 +103,13 @@ app.use((error, req, res, next) => {
 });
 
 // Start server
-const startTime = Date.now();
 app.listen(PORT, () => {
-    const startupTime = Date.now() - startTime;
-    
-    // Logging is now handled automatically by the LogManager constructor.
-    // No need to call startFileLogging here.
-    logManager.logStructured(`Server started successfully (Startup time: ${startupTime} ms)`);
-    
+    // Log server startup and configuration details
+    logManager.logStructured('\n********** SERVER STARTUP **********');
+    logManager.logStructured(`Server listening on port ${PORT}`);
+    logManager.logStructured('Loaded libraries: Express, CORS, Multer, PapaParse, Axios, Winston');
+    logManager.logStructured('************************************\n');
+
     console.log(`🚀 Ping Identity User Management Server running on http://localhost:${PORT}`);
     console.log(`📁 Static files served from: ${publicPath}`);
     console.log(`🌐 API endpoints available at: http://localhost:${PORT}/api`);
