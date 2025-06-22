@@ -107,8 +107,8 @@ const startTime = Date.now();
 app.listen(PORT, () => {
     const startupTime = Date.now() - startTime;
     
-    // Automatically start file logging and log server startup
-    logManager.startFileLogging('import-status.log');
+    // Logging is now handled automatically by the LogManager constructor.
+    // No need to call startFileLogging here.
     logManager.logStructured(`Server started successfully (Startup time: ${startupTime} ms)`);
     
     console.log(`🚀 Ping Identity User Management Server running on http://localhost:${PORT}`);
