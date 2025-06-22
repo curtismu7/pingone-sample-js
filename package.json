@@ -1,6 +1,6 @@
 {
   "name": "pingone-user-management",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Ping Identity User Management Application",
   "keywords": [
