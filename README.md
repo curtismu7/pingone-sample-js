@@ -444,3 +444,171 @@ For issues and questions:
 - Token caching
 - Comprehensive logging
 - Test suite
+
+## Versioning and Releases
+
+This project uses [Semantic Versioning](https://semver.org/) (SemVer) for version management. Each release is tagged in Git and automatically creates a GitHub release with assets.
+
+### Version Format
+- **MAJOR.MINOR.PATCH** (e.g., 1.0.0)
+- **MAJOR**: Breaking changes
+- **MINOR**: New features (backward compatible)
+- **PATCH**: Bug fixes (backward compatible)
+
+### Creating a New Release
+
+#### Option 1: Using npm scripts (Recommended)
+```bash
+# Patch release (bug fixes)
+npm run version:patch
+
+# Minor release (new features)
+npm run version:minor
+
+# Major release (breaking changes)
+npm run version:major
+
+# Full release with build
+npm run release
+```
+
+#### Option 2: Using the version script
+```bash
+# Patch release
+node scripts/version.js patch
+
+# Minor release
+node scripts/version.js minor
+
+# Major release
+node scripts/version.js major
+```
+
+#### Option 3: Manual process
+```bash
+# 1. Update version in package.json
+npm version patch|minor|major
+
+# 2. Create and push tag
+git tag -a v1.0.1 -m "Release version 1.0.1"
+git push origin master
+git push --tags
+
+# 3. Create GitHub release manually
+```
+
+### Automated Release Process
+
+When you push a tag starting with `v` (e.g., `v1.0.1`), GitHub Actions will automatically:
+
+1. ✅ Build the project
+2. ✅ Create a GitHub release
+3. ✅ Upload release assets:
+   - `p14c-js-sdk-auth.js` (built SDK)
+   - `source-code.zip` (complete source code)
+
+### Recovering Old Releases
+
+#### From GitHub Releases
+1. Go to [Releases page](https://github.com/curtismu7/pingone-sample-js/releases)
+2. Click on any version number
+3. Download the `source-code.zip` file
+4. Extract and use the code from that specific version
+
+#### From Git Tags
+```bash
+# List all available versions
+git tag -l
+
+# Checkout a specific version
+git checkout v1.0.0
+
+# Create a new branch from an old version
+git checkout -b hotfix-branch v1.0.0
+
+# Download a specific version as ZIP
+git archive --format=zip --output=v1.0.0.zip v1.0.0
+```
+
+#### From npm (if published)
+```bash
+# Install a specific version
+npm install pingone-user-management@1.0.0
+```
+
+### Release Assets
+
+Each release includes:
+- 📦 **Source Code**: Complete project files
+- 🔧 **Built SDK**: Pre-compiled PingOne SDK
+- 📋 **Changelog**: Detailed change history
+- 🏷️ **Git Tag**: Version reference in repository
+
+### Version History
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history and changes.
+
+### Best Practices
+
+1. **Always test before releasing**
+   ```bash
+   npm test
+   npm run build
+   ```
+
+2. **Update changelog before release**
+   - Add entries to `CHANGELOG.md`
+   - Use conventional commit messages
+
+3. **Tag releases immediately**
+   - Don't delay between commits and tags
+   - Use descriptive tag messages
+
+4. **Verify releases**
+   - Check GitHub Actions completed successfully
+   - Download and test release assets
+   - Verify all files are included
+
+### Rollback Process
+
+If you need to rollback to a previous version:
+
+1. **Identify the target version**
+   ```bash
+   git log --oneline --tags
+   ```
+
+2. **Create a rollback branch**
+   ```bash
+   git checkout -b rollback-v1.0.0 v1.0.0
+   ```
+
+3. **Update version and release**
+   ```bash
+   npm version patch
+   git tag -a v1.0.2 -m "Rollback to v1.0.0 functionality"
+   git push origin rollback-v1.0.0
+   git push --tags
+   ```
+
+### Release Checklist
+
+Before creating a release:
+
+- [ ] All tests pass (`npm test`)
+- [ ] Build succeeds (`npm run build`)
+- [ ] CHANGELOG.md is updated
+- [ ] README.md is current
+- [ ] No sensitive data in code
+- [ ] Dependencies are up to date
+- [ ] Documentation is complete
+
+After creating a release:
+
+- [ ] GitHub Actions completed successfully
+- [ ] Release assets are available
+- [ ] Release notes are accurate
+- [ ] Tag is properly created
+- [ ] Version is correctly incremented
+
+---
