@@ -658,7 +658,24 @@ class Utils {
         const actualDuration = Math.max(estimatedDurationMs, totalRecords * minTimePerRecord);
         
         let currentRecord = 0;
-        const incrementPerUpdate = totalRecords / (actualDuration / updateInterval);
+        
+        // Determine increment based on total records
+        let incrementPerUpdate;
+        if (totalRecords <= 100) {
+            incrementPerUpdate = 1; // Count by 1 for under 100 records
+        } else if (totalRecords <= 250) {
+            incrementPerUpdate = 5; // Count by 5 for 100-250 records
+        } else if (totalRecords <= 1000) {
+            incrementPerUpdate = 10; // Count by 10 for 250-1000 records
+        } else if (totalRecords <= 10000) {
+            incrementPerUpdate = 25; // Count by 25 for 1000-10000 records
+        } else {
+            incrementPerUpdate = 100; // Count by 100 for over 10000 records
+        }
+        
+        // Calculate how many updates we need to complete the operation
+        const totalUpdates = Math.ceil(totalRecords / incrementPerUpdate);
+        const timePerUpdate = actualDuration / totalUpdates;
         
         this.progressSimulationActive = true;
         
@@ -676,12 +693,15 @@ class Utils {
             if (displayRecord >= totalRecords) {
                 this.stopProgressSimulation();
             }
-        }, updateInterval);
+        }, timePerUpdate);
         
         this.log('Progress simulation started', 'debug', { 
             totalRecords, 
             estimatedDurationMs: actualDuration,
-            fileName 
+            fileName,
+            incrementPerUpdate,
+            totalUpdates,
+            timePerUpdate
         });
     }
 
