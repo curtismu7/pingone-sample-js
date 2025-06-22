@@ -563,8 +563,6 @@ class MainPage {
             utils.failOperationSpinner('step-processing', error.message);
         } finally {
             this.importInProgress = false;
-            // Auto-hide spinner after a delay to show completion
-            setTimeout(() => utils.hideSpinner(), 5000);
         }
     }
 
@@ -640,7 +638,6 @@ class MainPage {
             utils.failOperationSpinner('step-processing', error.message);
         } finally {
             this.modifyInProgress = false;
-            setTimeout(() => utils.hideSpinner(), 5000);
         }
     }
 
@@ -715,7 +712,6 @@ class MainPage {
             utils.failOperationSpinner('step-processing', error.message);
         } finally {
             this.deleteInProgress = false;
-            setTimeout(() => utils.hideSpinner(), 5000);
         }
     }
 
@@ -774,8 +770,6 @@ class MainPage {
             utils.log(`Failed to delete user: ${username} - ${error.message}`, 'error');
             utils.failOperationSpinner('step-processing', error.message);
             utils.showModal('Error', `Failed to delete user "${username}": ${error.message}`);
-        } finally {
-            setTimeout(() => utils.hideSpinner(), 5000);
         }
     }
 
