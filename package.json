@@ -8,13 +8,17 @@
     "user-management",
     "csv-import"
   ],
-  "homepage": "https://github.com/pingidentity/pingone-sample-js",
+  "homepage": "https://github.com/curtismu7/pingone-sample-js",
   "main": "server/app.js",
   "scripts": {
     "start": "node server/app.js",
     "dev": "nodemon server/app.js",
     "test": "jest",
-    "build": "cp node_modules/@ping-identity/p14c-js-sdk-auth/dist/browser/@ping-identity/p14c-js-sdk-auth.js p14c-js-sdk-auth.js"
+    "build": "cp node_modules/@ping-identity/p14c-js-sdk-auth/dist/browser/@ping-identity/p14c-js-sdk-auth.js p14c-js-sdk-auth.js",
+    "version:patch": "npm version patch && git push && git push --tags",
+    "version:minor": "npm version minor && git push && git push --tags",
+    "version:major": "npm version major && git push && git push --tags",
+    "release": "npm run build && npm run version:patch"
   },
   "dependencies": {
     "@ping-identity/p14c-js-sdk-auth": "^1.0.0-pre.2",
