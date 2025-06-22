@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const logManager = require('../utils/logManager');
 
+// Get logs (for API testing and debugging)
+router.get('/', (req, res) => {
+    try {
+        const logContent = logManager.getLogContent();
+        res.json({
+            success: true,
+            message: 'Logs retrieved successfully',
+            logContent: logContent,
+            config: logManager.config
+        });
+    } catch (error) {
+        logManager.logger.error('Failed to get logs', { error: error.message });
+        res.status(500).json({ error: 'Failed to get logs' });
+    }
+});
+
 // Handle client log entries
 router.post('/', (req, res) => {
     try {
