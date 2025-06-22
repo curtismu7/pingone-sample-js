@@ -1,6 +1,6 @@
 const express = require('express');
 const axios = require('axios');
-const { logger } = require('../utils/logger');
+const logManager = require('../utils/logManager');
 const { getWorkerToken } = require('./token');
 
 const router = express.Router();
@@ -17,7 +17,7 @@ router.delete('/user/:userId', async (req, res) => {
             });
         }
 
-        logger.info('Deleting user', {
+        logManager.info('Deleting user', {
             userId,
             environmentId
         });
@@ -34,7 +34,7 @@ router.delete('/user/:userId', async (req, res) => {
             }
         );
 
-        logger.info('User deleted successfully', {
+        logManager.info('User deleted successfully', {
             userId,
             environmentId
         });
@@ -45,7 +45,7 @@ router.delete('/user/:userId', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('User deletion error', {
+        logManager.error('User deletion error', {
             userId: req.params.userId,
             error: error.message,
             response: error.response?.data
@@ -79,7 +79,7 @@ router.post('/bulk', async (req, res) => {
             });
         }
 
-        logger.info('Starting bulk user deletion', {
+        logManager.info('Starting bulk user deletion', {
             userCount: userIds.length,
             environmentId
         });
@@ -122,7 +122,7 @@ router.post('/bulk', async (req, res) => {
             }
         }
 
-        logger.info('Bulk user deletion completed', {
+        logManager.info('Bulk user deletion completed', {
             total: userIds.length,
             successCount,
             errorCount
@@ -139,7 +139,7 @@ router.post('/bulk', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Bulk user deletion error', {
+        logManager.error('Bulk user deletion error', {
             error: error.message,
             stack: error.stack
         });
@@ -162,7 +162,7 @@ router.post('/by-username', async (req, res) => {
             });
         }
 
-        logger.info('Deleting user by username', {
+        logManager.info('Deleting user by username', {
             username,
             environmentId
         });
@@ -170,7 +170,7 @@ router.post('/by-username', async (req, res) => {
         const token = await getWorkerToken(environmentId, clientId, clientSecret);
         
         // First, find the user by username
-        logger.info('Searching for user', {
+        logManager.info('Searching for user', {
             username,
             filter: `username eq "${username}"`
         });
@@ -188,14 +188,14 @@ router.post('/by-username', async (req, res) => {
             }
         );
 
-        logger.info('Search response', {
+        logManager.info('Search response', {
             username,
             found: searchResponse.data._embedded?.users?.length || 0,
             total: searchResponse.data.count || 0
         });
 
         if (!searchResponse.data._embedded || !searchResponse.data._embedded.users || searchResponse.data._embedded.users.length === 0) {
-            logger.warn('User not found in search', {
+            logManager.warn('User not found in search', {
                 username,
                 responseData: searchResponse.data
             });
@@ -207,7 +207,7 @@ router.post('/by-username', async (req, res) => {
 
         const user = searchResponse.data._embedded.users[0];
         
-        logger.info('Found user, attempting deletion', {
+        logManager.info('Found user, attempting deletion', {
             username,
             userId: user.id,
             userEmail: user.email
@@ -224,7 +224,7 @@ router.post('/by-username', async (req, res) => {
             }
         );
 
-        logger.info('User deleted by username successfully', {
+        logManager.info('User deleted by username successfully', {
             username,
             userId: user.id,
             environmentId
@@ -237,7 +237,7 @@ router.post('/by-username', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Delete user by username error', {
+        logManager.error('Delete user by username error', {
             username: req.body.username,
             error: error.message,
             status: error.response?.status,
@@ -276,7 +276,7 @@ router.post('/by-email', async (req, res) => {
             });
         }
 
-        logger.info('Deleting user by email', {
+        logManager.info('Deleting user by email', {
             email,
             environmentId
         });
@@ -316,7 +316,7 @@ router.post('/by-email', async (req, res) => {
             }
         );
 
-        logger.info('User deleted by email successfully', {
+        logManager.info('User deleted by email successfully', {
             email,
             userId: user.id,
             environmentId
@@ -329,7 +329,7 @@ router.post('/by-email', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Delete user by email error', {
+        logManager.error('Delete user by email error', {
             email: req.body.email,
             error: error.message,
             response: error.response?.data

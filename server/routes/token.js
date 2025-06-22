@@ -58,14 +58,20 @@ function logTokenAgeInfo(tokenData, action = 'reused') {
     const timeRemaining = Math.floor((tokenData.expiresAt - now) / (60 * 1000));
     const agePercentage = Math.round((ageMinutes / (TOKEN_CONFIG.CACHE_DURATION / (60 * 1000))) * 100);
     
-    logManager.info(`Token ${action} - Age details`, {
+    // Log to structured format for better visibility in log file
+    logManager.info(`TOKEN ${action.toUpperCase()} - Age Details`, {
         tokenAge: `${ageMinutes} minutes`,
         timeRemaining: `${timeRemaining} minutes`,
         agePercentage: `${agePercentage}% of cache duration`,
         createdAt: new Date(tokenData.createdAt).toISOString(),
         expiresAt: new Date(tokenData.expiresAt).toISOString(),
-        cacheDuration: `${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`
+        cacheDuration: `${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`,
+        environmentId: tokenData.environmentId.substring(0, 8) + '...',
+        clientId: tokenData.clientId.substring(0, 8) + '...'
     });
+    
+    // Also log in simple format for easy reading
+    logManager.logStructured(`TOKEN ${action.toUpperCase()}: Age=${ageMinutes}m, Remaining=${timeRemaining}m, Usage=${agePercentage}%`);
 }
 
 // Get worker token with caching
@@ -80,15 +86,18 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
         logTokenAgeInfo(cached, 'reused');
         
         const timeRemaining = Math.floor((cached.expiresAt - now) / (60 * 1000));
+        logManager.logStructured(`TOKEN REUSED: ${timeRemaining} minutes remaining`);
         logManager.logWorkerTokenReused(`${timeRemaining} mins`);
         return cached.access_token;
     }
     
-    logManager.info('Getting new worker token', { 
+    logManager.info('TOKEN REQUEST - Getting new worker token', { 
         environmentId, 
         clientId,
-        reason: cached ? 'token expired' : 'no cached token'
+        reason: cached ? 'token expired' : 'no cached token',
+        cacheDuration: `${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`
     });
+    logManager.logStructured('TOKEN REQUEST: Getting new worker token');
     logManager.logWorkerTokenRequested();
 
     // Construct the correct token endpoint URL
@@ -136,7 +145,7 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
             tokenCache[cacheKey] = tokenData;
             
             // Log detailed token creation information
-            logManager.info('Worker token obtained and cached', { 
+            logManager.info('TOKEN CREATED - Worker token obtained and cached', { 
                 environmentId, 
                 clientId,
                 expiresAt: new Date(expiresAt).toISOString(),
@@ -145,6 +154,9 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
                 cacheDuration: `${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`,
                 bufferTime: `${TOKEN_CONFIG.BUFFER_TIME / (60 * 1000)} minutes`
             });
+            
+            // Log in simple format for easy reading
+            logManager.logStructured(`TOKEN CREATED: Cached for ${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`);
             
             // Log initial age info (0 minutes old)
             logTokenAgeInfo(tokenData, 'created');

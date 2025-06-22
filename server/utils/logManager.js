@@ -96,6 +96,9 @@ class LogManager {
         libraries.forEach(lib => {
             this.logStructured(`Loaded ${lib.name}: ${lib.status}`);
         });
+        
+        // Log token configuration
+        this.logStructured('TOKEN CONFIG: Cache=50min, Buffer=2min, MaxAge=60min');
     }
 
     logStructured(message) {

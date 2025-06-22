@@ -1,6 +1,6 @@
 const express = require('express');
 const axios = require('axios');
-const { logger } = require('../utils/logger');
+const logManager = require('../utils/logManager');
 const { getWorkerToken } = require('./token');
 
 const router = express.Router();
@@ -17,7 +17,7 @@ router.put('/user/:userId', async (req, res) => {
             });
         }
 
-        logger.info('Modifying user', {
+        logManager.info('Modifying user', {
             userId,
             environmentId,
             fields: Object.keys(userData)
@@ -36,7 +36,7 @@ router.put('/user/:userId', async (req, res) => {
             }
         );
 
-        logger.info('User modified successfully', {
+        logManager.info('User modified successfully', {
             userId,
             environmentId
         });
@@ -48,7 +48,7 @@ router.put('/user/:userId', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('User modification error', {
+        logManager.error('User modification error', {
             userId: req.params.userId,
             error: error.message,
             response: error.response?.data
@@ -84,7 +84,7 @@ router.patch('/user/:userId', async (req, res) => {
             });
         }
 
-        logger.info('Partially updating user', {
+        logManager.info('Partially updating user', {
             userId,
             environmentId,
             fields: Object.keys(userData)
@@ -103,7 +103,7 @@ router.patch('/user/:userId', async (req, res) => {
             }
         );
 
-        logger.info('User partially updated successfully', {
+        logManager.info('User partially updated successfully', {
             userId,
             environmentId
         });
@@ -115,7 +115,7 @@ router.patch('/user/:userId', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('User partial update error', {
+        logManager.error('User partial update error', {
             userId: req.params.userId,
             error: error.message,
             response: error.response?.data
@@ -150,7 +150,7 @@ router.post('/bulk', async (req, res) => {
             });
         }
 
-        logger.info('Starting bulk user modification', {
+        logManager.info('Starting bulk user modification', {
             userCount: users.length,
             environmentId
         });
@@ -176,7 +176,7 @@ router.post('/bulk', async (req, res) => {
                 
                 // If we have username but no userId, find the user first
                 if (!userId && username) {
-                    logger.info('Finding user by username for modification', { username });
+                    logManager.info('Finding user by username for modification', { username });
                     
                     const searchResponse = await axios.get(
                         `https://api.pingone.com/v1/environments/${environmentId}/users`,
@@ -220,7 +220,7 @@ router.post('/bulk', async (req, res) => {
                 successCount++;
                 
             } catch (error) {
-                logger.error('Individual user modification error', {
+                logManager.error('Individual user modification error', {
                     userId: userUpdate.userId,
                     username: userUpdate.username,
                     error: error.message,
@@ -241,7 +241,7 @@ router.post('/bulk', async (req, res) => {
             }
         }
 
-        logger.info('Bulk user modification completed', {
+        logManager.info('Bulk user modification completed', {
             total: users.length,
             successCount,
             errorCount
@@ -258,7 +258,7 @@ router.post('/bulk', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Bulk user modification error', {
+        logManager.error('Bulk user modification error', {
             error: error.message,
             stack: error.stack
         });
@@ -281,7 +281,7 @@ router.post('/by-username', async (req, res) => {
             });
         }
 
-        logger.info('Modifying user by username', {
+        logManager.info('Modifying user by username', {
             username,
             environmentId,
             fields: Object.keys(userData)
@@ -324,7 +324,7 @@ router.post('/by-username', async (req, res) => {
             }
         );
 
-        logger.info('User modified by username successfully', {
+        logManager.info('User modified by username successfully', {
             username,
             userId: user.id,
             environmentId
@@ -338,7 +338,7 @@ router.post('/by-username', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Modify user by username error', {
+        logManager.error('Modify user by username error', {
             username: req.body.username,
             error: error.message,
             status: error.response?.status,
@@ -376,7 +376,7 @@ router.get('/user/:userId', async (req, res) => {
             });
         }
 
-        logger.info('Getting user details', {
+        logManager.info('Getting user details', {
             userId,
             environmentId
         });
@@ -399,7 +399,7 @@ router.get('/user/:userId', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Get user details error', {
+        logManager.error('Get user details error', {
             userId: req.params.userId,
             error: error.message,
             response: error.response?.data
