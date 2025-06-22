@@ -46,7 +46,18 @@ class LogManager {
                 new winston.transports.Console({
                     format: winston.format.combine(
                         winston.format.colorize(),
-                        winston.format.printf(info => `[${info.timestamp}] ${info.level}: ${info.message}`)
+                        winston.format.printf(info => {
+                            let logMessage = `[${info.timestamp}] ${info.level}: ${info.message}`;
+                            const splat = info[Symbol.for('splat')];
+                            if (splat && splat.length) {
+                                const meta = splat[0];
+                                const metaString = JSON.stringify(meta, null, 2);
+                                if (metaString !== '{}') {
+                                    logMessage += `\n${metaString}`;
+                                }
+                            }
+                            return logMessage;
+                        })
                     )
                 })
             ]

@@ -24,6 +24,7 @@ class MainPage {
     async init() {
         // DEBUG: If page doesn't load properly, check if utils is available
         await this.waitForUtils();
+        await this.waitForTippy();
         this.setupEventListeners();
         this.loadPersistedState();
         this.initializeTooltips();
@@ -37,19 +38,28 @@ class MainPage {
         }
     }
 
+    async waitForTippy() {
+        // Wait for Tippy.js to be available
+        while (typeof window.tippy === 'undefined') {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+
     initializeTooltips() {
         // Initialize Tippy.js tooltips for all elements with data-tippy-content
         // DEBUG: If tooltips don't show, check if Tippy.js library loaded correctly
         const tooltipElements = document.querySelectorAll('[data-tippy-content]');
         tooltipElements.forEach(element => {
-            tippy(element, {
-                content: element.getAttribute('data-tippy-content'),
-                placement: 'top',
-                arrow: true,
-                theme: 'light',
-                animation: 'scale',
-                duration: [200, 150]
-            });
+            if (typeof window.tippy !== 'undefined') {
+                tippy(element, {
+                    content: element.getAttribute('data-tippy-content'),
+                    placement: 'top',
+                    arrow: true,
+                    theme: 'light',
+                    animation: 'scale',
+                    duration: [200, 150]
+                });
+            }
         });
     }
 
@@ -510,44 +520,21 @@ class MainPage {
             this.updateOperationStatus('import', 'in-progress');
             
             // Show operation spinner with file info
-            utils.showOperationSpinner(`Starting Import Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name, 'User Import', this.currentFileInfo.records);
+            utils.showOperationSpinner('Importing Users...', this.currentFile.name, 'User Import', this.currentFileInfo.records);
             utils.log(`Import Users started – action: Import Users (${this.currentFileInfo.records} records) from ${this.currentFileInfo.name}`, 'info');
-
-            // Start the workflow steps
-            utils.startWorkflowSteps();
-
-            // Get worker token
-            utils.log('Getting worker token for import operation', 'info');
-            const tokenResponse = await utils.getWorkerToken();
-            
-            if (!tokenResponse.success) {
-                throw new Error(`Failed to get worker token: ${tokenResponse.message}`);
-            }
-
-            utils.updateTokenStep(tokenResponse.data.access_token, tokenResponse.data.expires_in);
 
             // Read and parse file
             const text = await this.readFileAsText(this.currentFile);
             const parsedData = Papa.parse(text, { header: true, skipEmptyLines: true });
             
-            utils.addFileLoadingStep(this.currentFileInfo.name, parsedData.data.length);
-
-            // Start processing
-            utils.addProcessingStep();
-            
-            // Start progress simulation
-            utils.startProgressSimulation(parsedData.data.length, 8000, this.currentFileInfo.name);
-            
-            // Process the import
+            // Process the import with real-time progress
             const results = await this.processImport(parsedData.data, {
                 environmentId: settings.environmentId,
                 clientId: settings.clientId,
-                clientSecret: settings.clientSecret,
-                accessToken: tokenResponse.data.access_token
+                clientSecret: settings.clientSecret
             });
 
             // Complete the operation
-            utils.addFinalizingStep(results.successCount, results.errorCount, 'Import');
             utils.completeOperationSpinner(results.successCount, results.errorCount);
             
             this.updateOperationStatus('import', 'completed', results);
@@ -589,7 +576,7 @@ class MainPage {
             this.modifyInProgress = true;
             this.updateOperationStatus('modify', 'in-progress');
             
-            utils.showOperationSpinner(`Starting Modify Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name, 'User Modification', this.currentFileInfo.records);
+            utils.showOperationSpinner('Modifying Users...', this.currentFile.name, 'User Modification', this.currentFileInfo.records);
             utils.log(`Modify Users started – action: Modify Users (${this.currentFileInfo.records} records)`, 'info');
 
             utils.startWorkflowSteps();
@@ -664,7 +651,7 @@ class MainPage {
             this.deleteInProgress = true;
             this.updateOperationStatus('delete', 'in-progress');
             
-            utils.showOperationSpinner(`Starting Delete Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name, 'User Deletion', this.currentFileInfo.records);
+            utils.showOperationSpinner('Deleting Users...', this.currentFile.name, 'User Deletion', this.currentFileInfo.records);
             utils.log(`Delete Users started – action: Delete Users (${this.currentFileInfo.records} records)`, 'info');
 
             utils.startWorkflowSteps();
@@ -738,7 +725,7 @@ class MainPage {
         }
 
         try {
-            utils.showOperationSpinner('Starting Delete Single User...', null, 'Single User Deletion', 1);
+            utils.showOperationSpinner('Deleting User...', username, 'Single User Deletion', 1);
             utils.log('Delete Single User started – action: Delete Single User', 'info');
 
             // Get worker token
@@ -795,7 +782,7 @@ class MainPage {
     }
 
     async processImport(records, credentials) {
-        // Process bulk user import
+        // Process bulk user import with real-time progress
         // DEBUG: Check server logs for detailed PingOne API responses
         const startTime = Date.now();
         
@@ -810,7 +797,8 @@ class MainPage {
                     environmentId: credentials.environmentId,
                     clientId: credentials.clientId,
                     clientSecret: credentials.clientSecret
-                })
+                }),
+                signal: utils.currentOperationController.signal
             });
 
             if (!response.ok) {
@@ -819,6 +807,12 @@ class MainPage {
             }
 
             const result = await response.json();
+            
+            // Connect to SSE for real-time progress updates
+            if (result.operationId) {
+                utils.connectToProgress(result.operationId);
+            }
+            
             const duration = Date.now() - startTime;
             
             return {
@@ -847,7 +841,8 @@ class MainPage {
                     environmentId: credentials.environmentId,
                     clientId: credentials.clientId,
                     clientSecret: credentials.clientSecret
-                })
+                }),
+                signal: utils.currentOperationController.signal
             });
 
             if (!response.ok) {
@@ -891,7 +886,8 @@ class MainPage {
                     environmentId: credentials.environmentId,
                     clientId: credentials.clientId,
                     clientSecret: credentials.clientSecret
-                })
+                }),
+                signal: utils.currentOperationController.signal
             });
 
             if (!response.ok) {
@@ -916,17 +912,11 @@ class MainPage {
         // Process single user deletion
         // DEBUG: Check PingOne user existence before deletion attempt
         try {
-            const response = await fetch('/api/delete', {
+            const response = await fetch('/api/delete/user', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    usernames: [username],
-                    environmentId: credentials.environmentId,
-                    clientId: credentials.clientId,
-                    clientSecret: credentials.clientSecret
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username }),
+                signal: utils.currentOperationController.signal
             });
 
             if (!response.ok) {
