@@ -159,6 +159,7 @@ router.post('/bulk', async (req, res) => {
         const results = [];
         let successCount = 0;
         let errorCount = 0;
+        const startTime = Date.now();
 
         for (const userUpdate of users) {
             try {
@@ -241,6 +242,21 @@ router.post('/bulk', async (req, res) => {
             }
         }
 
+        const duration = Date.now() - startTime;
+        
+        // Enhanced totals logging
+        logManager.info('MODIFY TOTALS - Bulk User Modification Completed', {
+            totalRecords: users.length,
+            successful: successCount,
+            failed: errorCount,
+            skipped: 0, // Modify doesn't have skipped records
+            duration: `${duration}ms`,
+            successRate: `${Math.round((successCount / users.length) * 100)}%`
+        });
+        
+        // Log structured totals for easy reading
+        logManager.logStructured(`MODIFY TOTALS: Total=${users.length}, Modified=${successCount}, Failed=${errorCount}, Skipped=0, Duration=${duration}ms`);
+        
         logManager.info('Bulk user modification completed', {
             total: users.length,
             successCount,
@@ -416,6 +432,44 @@ router.get('/user/:userId', async (req, res) => {
             });
         }
     }
+});
+
+// GET /api/modify/test-totals - Test totals logging (for demonstration)
+router.get('/test-totals', (req, res) => {
+    const startTime = Date.now();
+    
+    // Simulate a bulk operation
+    const totalRecords = 10;
+    const successful = 8;
+    const failed = 2;
+    const skipped = 0;
+    
+    const duration = Date.now() - startTime;
+    
+    // Enhanced totals logging
+    logManager.info('MODIFY TOTALS - Test Bulk User Modification Completed', {
+        totalRecords: totalRecords,
+        successful: successful,
+        failed: failed,
+        skipped: skipped,
+        duration: `${duration}ms`,
+        successRate: `${Math.round((successful / totalRecords) * 100)}%`
+    });
+    
+    // Log structured totals for easy reading
+    logManager.logStructured(`MODIFY TOTALS: Total=${totalRecords}, Modified=${successful}, Failed=${failed}, Skipped=${skipped}, Duration=${duration}ms`);
+    
+    res.json({
+        success: true,
+        message: 'Test totals logging completed',
+        summary: {
+            total: totalRecords,
+            successful: successful,
+            failed: failed,
+            skipped: skipped,
+            duration: duration
+        }
+    });
 });
 
 module.exports = router; 
