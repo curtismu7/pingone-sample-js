@@ -106,6 +106,7 @@ router.post('/', upload.single('csv'), async (req, res) => {
         // Get worker token for PingOne API authentication
         // DEBUG: If token request fails, check credentials and PingOne connectivity
         const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        const defaultPopulationId = await getDefaultPopulation(environmentId, token);
 
         // Process users one by one
         // DEBUG: Monitor this loop for performance and error patterns
@@ -117,10 +118,6 @@ router.post('/', upload.single('csv'), async (req, res) => {
             const user = users[i];
             
             try {
-                // Get default population ID from PingOne
-                // DEBUG: If population lookup fails, check environment configuration
-                const defaultPopulationId = await getDefaultPopulation(environmentId, token);
-                
                 // Map CSV data to PingOne user format
                 const userData = mapUserData(user, defaultPopulationId);
                 
@@ -257,6 +254,7 @@ router.post('/bulk', async (req, res) => {
 
         // Get worker token for authentication
         const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        const defaultPopulationId = await getDefaultPopulation(environmentId, token);
 
         // Process users
         const results = [];
@@ -268,7 +266,6 @@ router.post('/bulk', async (req, res) => {
             
             try {
                 // Get default population if not specified in user data
-                const defaultPopulationId = await getDefaultPopulation(environmentId, token);
                 const userData = mapUserData(user, defaultPopulationId);
                 const result = await createUser(userData, environmentId, token);
                 
@@ -450,7 +447,7 @@ function mapUserData(user, defaultPopulationId = null) {
     }
 
     // Use populationId from CSV if present, otherwise fall back to the default
-    const populationId = sanitizedUser.populationId || defaultPopulationId;
+    const populationId = defaultPopulationId;
 
     const data = {
         population: { id: populationId },
