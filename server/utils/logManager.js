@@ -12,7 +12,8 @@ class LogManager {
         this.fileTransport = null;
         this.logger = this.createLogger();
         this.ensureLogDirectory();
-        this.initializeLogging();
+        // Start file logging immediately.
+        this.startFileLogging();
     }
 
     createLogger() {
@@ -62,42 +63,6 @@ class LogManager {
     
     getLogFilePath() {
         return path.join(this.logDirectory, this.config.logFile);
-    }
-
-    initializeLogging() {
-        // Start file logging immediately and log server startup
-        this.startFileLogging();
-        this.logServerStartup();
-    }
-
-    logServerStartup() {
-        const port = process.env.PORT || 3002;
-        // Log server startup header
-        this.logStructured('\n********** SERVER STARTUP **********');
-        this.logStructured(`Started server on port ${port}`);
-        // Log library initialization status
-        this.logLibraryStatus();
-        this.logStructured('************************************\n');
-    }
-
-    logLibraryStatus() {
-        // Log libraries being loaded
-        this.logStructured('\n**** LIBRARIES ****');
-        this.logStructured('Loaded libraries: uDSV, Tippy.js, Popper.js');
-        const libraries = [
-            { name: 'Winston (Logging)', status: 'OK' },
-            { name: 'Express.js', status: 'OK' },
-            { name: 'Axios (HTTP Client)', status: 'OK' },
-            { name: 'Multer (File Upload)', status: 'OK' },
-            { name: 'PapaCSV (CSV Parser)', status: 'OK' },
-            { name: 'CORS Middleware', status: 'OK' }
-        ];
-        libraries.forEach(lib => {
-            this.logStructured(`  - ${lib.name}: ${lib.status}`);
-        });
-        // Log token configuration
-        this.logStructured('TOKEN CONFIG: Cache=50min, Buffer=2min, MaxAge=60min');
-        this.logStructured('***********************\n');
     }
 
     logStructured(message) {

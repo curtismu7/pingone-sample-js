@@ -443,99 +443,97 @@ async function getDefaultPopulation(environmentId, token) {
 // Helper function to map CSV user data to PingOne user format
 // DEBUG: If user data mapping fails, check CSV headers and PingOne user schema
 function mapUserData(user, defaultPopulationId = null) {
-    // DEBUG: Log user data structure for troubleshooting
-    logManager.debug('Mapping user data', {
-        username: user.username,
-        email: user.email,
-        hasPopulationId: !!user.populationId,
-        defaultPopulationId
-    });
+    // Sanitize user data to remove any leading/trailing whitespace
+    const sanitizedUser = {};
+    for (const key in user) {
+        sanitizedUser[key] = typeof user[key] === 'string' ? user[key].trim() : user[key];
+    }
 
-    // Basic user data structure for PingOne
-    const userData = {
-        username: user.username,
-        email: user.email,
-        population: { 
-            id: user.populationId || defaultPopulationId 
-        },
-        enabled: user.active !== undefined ? user.active === 'true' || user.active === true : true
+    // Use populationId from CSV if present, otherwise fall back to the default
+    const populationId = sanitizedUser.populationId || defaultPopulationId;
+
+    const data = {
+        population: { id: populationId },
+        username: sanitizedUser.username,
+        email: sanitizedUser.email,
+        enabled: sanitizedUser.active !== undefined ? sanitizedUser.active === 'true' || sanitizedUser.active === true : true
     };
 
     // Add name information if available
-    if (user.firstName || user.lastName || user.givenName || user.familyName) {
-        userData.name = {};
+    if (sanitizedUser.firstName || sanitizedUser.lastName || sanitizedUser.givenName || sanitizedUser.familyName) {
+        data.name = {};
         
-        if (user.firstName || user.givenName) {
-            userData.name.given = user.firstName || user.givenName;
+        if (sanitizedUser.firstName || sanitizedUser.givenName) {
+            data.name.given = sanitizedUser.firstName || sanitizedUser.givenName;
         }
         
-        if (user.lastName || user.familyName) {
-            userData.name.family = user.lastName || user.familyName;
+        if (sanitizedUser.lastName || sanitizedUser.familyName) {
+            data.name.family = sanitizedUser.lastName || sanitizedUser.familyName;
         }
         
-        if (user.middleName) {
-            userData.name.middle = user.middleName;
+        if (sanitizedUser.middleName) {
+            data.name.middle = sanitizedUser.middleName;
         }
         
-        if (user.formattedName) {
-            userData.name.formatted = user.formattedName;
+        if (sanitizedUser.formattedName) {
+            data.name.formatted = sanitizedUser.formattedName;
         }
         
-        if (user.prefix) {
-            userData.name.honorificPrefix = user.prefix;
+        if (sanitizedUser.prefix) {
+            data.name.honorificPrefix = sanitizedUser.prefix;
         }
         
-        if (user.suffix) {
-            userData.name.honorificSuffix = user.suffix;
+        if (sanitizedUser.suffix) {
+            data.name.honorificSuffix = sanitizedUser.suffix;
         }
     }
 
     // Add additional profile information
-    if (user.nickname) {
-        userData.nickname = user.nickname;
+    if (sanitizedUser.nickname) {
+        data.nickname = sanitizedUser.nickname;
     }
     
-    if (user.title) {
-        userData.title = user.title;
+    if (sanitizedUser.title) {
+        data.title = sanitizedUser.title;
     }
     
-    if (user.preferredLanguage) {
-        userData.preferredLanguage = user.preferredLanguage;
+    if (sanitizedUser.preferredLanguage) {
+        data.preferredLanguage = sanitizedUser.preferredLanguage;
     }
     
-    if (user.locale) {
-        userData.locale = user.locale;
+    if (sanitizedUser.locale) {
+        data.locale = sanitizedUser.locale;
     }
     
-    if (user.timezone) {
-        userData.timezone = user.timezone;
+    if (sanitizedUser.timezone) {
+        data.timezone = sanitizedUser.timezone;
     }
 
     // Add external ID if provided
-    if (user.externalId) {
-        userData.externalId = user.externalId;
+    if (sanitizedUser.externalId) {
+        data.externalId = sanitizedUser.externalId;
     }
 
     // Add type if provided (employee, contractor, etc.)
-    if (user.type) {
-        userData.type = user.type;
+    if (sanitizedUser.type) {
+        data.type = sanitizedUser.type;
     }
 
     // Add phone numbers if provided
-    if (user.primaryPhone || user.mobilePhone) {
-        userData.phoneNumbers = [];
+    if (sanitizedUser.primaryPhone || sanitizedUser.mobilePhone) {
+        data.phoneNumbers = [];
         
-        if (user.primaryPhone) {
-            userData.phoneNumbers.push({
-                value: user.primaryPhone,
+        if (sanitizedUser.primaryPhone) {
+            data.phoneNumbers.push({
+                value: sanitizedUser.primaryPhone,
                 type: 'work',
                 primary: true
             });
         }
         
-        if (user.mobilePhone && user.mobilePhone !== user.primaryPhone) {
-            userData.phoneNumbers.push({
-                value: user.mobilePhone,
+        if (sanitizedUser.mobilePhone && sanitizedUser.mobilePhone !== sanitizedUser.primaryPhone) {
+            data.phoneNumbers.push({
+                value: sanitizedUser.mobilePhone,
                 type: 'mobile',
                 primary: false
             });
@@ -543,53 +541,53 @@ function mapUserData(user, defaultPopulationId = null) {
     }
 
     // Add address if provided
-    if (user.streetAddress || user.locality || user.region || user.postalCode || user.countryCode) {
-        userData.addresses = [{
+    if (sanitizedUser.streetAddress || sanitizedUser.locality || sanitizedUser.region || sanitizedUser.postalCode || sanitizedUser.countryCode) {
+        data.addresses = [{
             type: 'work',
             primary: true
         }];
         
-        if (user.streetAddress) {
-            userData.addresses[0].streetAddress = user.streetAddress;
+        if (sanitizedUser.streetAddress) {
+            data.addresses[0].streetAddress = sanitizedUser.streetAddress;
         }
         
-        if (user.locality) {
-            userData.addresses[0].locality = user.locality;
+        if (sanitizedUser.locality) {
+            data.addresses[0].locality = sanitizedUser.locality;
         }
         
-        if (user.region) {
-            userData.addresses[0].region = user.region;
+        if (sanitizedUser.region) {
+            data.addresses[0].region = sanitizedUser.region;
         }
         
-        if (user.postalCode) {
-            userData.addresses[0].postalCode = user.postalCode;
+        if (sanitizedUser.postalCode) {
+            data.addresses[0].postalCode = sanitizedUser.postalCode;
         }
         
-        if (user.countryCode) {
-            userData.addresses[0].countryCode = user.countryCode;
+        if (sanitizedUser.countryCode) {
+            data.addresses[0].countryCode = sanitizedUser.countryCode;
         }
     }
 
     // Add password if provided (for initial password set)
-    if (user.password) {
-        userData.password = {
-            value: user.password,
+    if (sanitizedUser.password) {
+        data.password = {
+            value: sanitizedUser.password,
             forceChange: false // Set to true if you want users to change password on first login
         };
     }
 
     // DEBUG: Log final mapped user data structure
     logManager.debug('User data mapped', {
-        username: userData.username,
-        email: userData.email,
-        populationId: userData.population?.id,
-        hasName: !!userData.name,
-        hasPhoneNumbers: !!userData.phoneNumbers,
-        hasAddresses: !!userData.addresses,
-        hasPassword: !!userData.password
+        username: data.username,
+        email: data.email,
+        populationId: data.population?.id,
+        hasName: !!data.name,
+        hasPhoneNumbers: !!data.phoneNumbers,
+        hasAddresses: !!data.addresses,
+        hasPassword: !!data.password
     });
 
-    return userData;
+    return data;
 }
 
 // Helper function to create a user in PingOne
