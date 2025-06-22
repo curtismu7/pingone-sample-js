@@ -558,45 +558,147 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 
 /* Enhanced Spinner with Detailed Status - Ping Identity Red Theme */
 .spinner-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    width: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10001;
+    background: rgba(0,0,0,0.7);
+}
+
+.spinner-container {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    border: 1.5px solid #e5e7eb;
+    max-width: 420px;
+    width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    margin: 0;
+}
+
+.spinner-content {
+    padding: 1.2rem 1.2rem 0.5rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.spinner-header, .spinner-details, .spinner-progress-section, .spinner-steps, .spinner-status-summary {
+    padding: 0.7rem 0.2rem;
+    margin-bottom: 0.3rem;
+}
+
+.spinner-header {
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 0.2rem;
+}
+
+.spinner-details, .spinner-progress-section, .spinner-steps, .spinner-status-summary {
+    border-bottom: none;
+}
+
+.spinner-title-section h3 {
+    font-size: 1.15rem;
+    margin-bottom: 0.2rem;
+}
+
+.spinner-subtitle {
+    font-size: 0.95rem;
+    margin-bottom: 0.1rem;
+}
+
+.spinner-footer-btn-container {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.7rem;
+    padding: 0.7rem 0.2rem 0.2rem 0.2rem;
+    border-top: 1px solid #e5e7eb;
+    background: #fafbfc;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+}
+
+.spinner-footer-btn-container.hidden {
+    display: none !important;
+}
+
+.cancel-btn {
+    background: #f3f4f6;
+    color: #b91c1c;
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem 1.2rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cancel-btn:hover {
+    background: #fee2e2;
+    color: #7f1d1d;
+    border-color: #fca5a5;
+}
+
+.close-btn {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem 1.2rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.close-btn:hover {
+    background: #e0e7ef;
+    color: #1e293b;
+    border-color: #a5b4fc;
+}
+
+/* Legacy spinner styles for backward compatibility */
+.spinner {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: rgba(0, 0, 0, 0.7);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 10001;
-    backdrop-filter: blur(4px);
-}
-
-.spinner-container {
-    background-color: var(--surface);
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    max-width: 600px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
-    border: 1px solid var(--ping-gray-light);
 }
 
 .spinner-content {
-    padding: 0;
-    text-align: left;
+    background-color: var(--surface);
+    padding: 2rem;
+    border-radius: 8px;
+    text-align: center;
+    min-width: 400px;
+    box-shadow: var(--shadow);
 }
 
-/* Header Section */
-.spinner-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 2rem 2rem 1.5rem 2rem;
-    border-bottom: 1px solid var(--ping-gray-light);
-    background: linear-gradient(135deg, var(--ping-red) 0%, #d10024 100%);
-    color: white;
-    border-radius: 12px 12px 0 0;
+.spinner-icon {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    border-top: 4px solid #dc2626;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.spinner-icon-container {
+    flex-shrink: 0;
 }
 
 .spinner-header-main {
@@ -606,100 +708,22 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     flex: 1;
 }
 
-.spinner-icon-container {
-    flex-shrink: 0;
-}
-
-.spinner-icon {
-    width: 48px;
-    height: 48px;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    border-top: 4px solid white;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-.spinner-title-section {
-    flex: 1;
-}
-
-.spinner-title-section h3 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin: 0 0 0.5rem 0;
-    color: white;
-    line-height: 1.2;
-}
-
-.spinner-subtitle {
-    font-size: 0.95rem;
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: 500;
-}
-
-.spinner-header-actions {
-    flex-shrink: 0;
-}
-
-.cancel-btn {
-    background-color: rgba(255, 255, 255, 0.2);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 0.75rem 1.5rem;
+.progress-bar {
+    width: 100%;
+    height: 12px;
+    background-color: #f3f4f6;
     border-radius: 6px;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    backdrop-filter: blur(10px);
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
 }
 
-.cancel-btn:hover {
-    background-color: rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.5);
-    transform: translateY(-1px);
-}
-
-/* Operation Details Section */
-.spinner-details {
-    padding: 1.5rem 2rem;
-    background-color: var(--ping-blue-secondary);
-    border-bottom: 1px solid var(--ping-gray-light);
-}
-
-.operation-info {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 0;
-}
-
-.info-label {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    min-width: 100px;
-}
-
-.info-value {
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: var(--ping-red);
-    text-align: right;
-    font-family: 'Courier New', monospace;
-}
-
-/* Progress Section */
-.spinner-progress-section {
-    padding: 1.5rem 2rem;
-    background-color: white;
-    border-bottom: 1px solid var(--ping-gray-light);
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #dc2626 0%, #b91c1c 100%);
+    border-radius: 6px;
+    width: 0%;
+    transition: width 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .progress-header {
@@ -712,43 +736,14 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 .progress-label {
     font-size: 1rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #374151;
 }
 
 .progress-percentage {
     font-size: 1.1rem;
     font-weight: 700;
-    color: var(--ping-red);
+    color: #dc2626;
     font-family: 'Courier New', monospace;
-}
-
-.progress-bar-container {
-    margin-bottom: 1rem;
-}
-
-.progress-bar {
-    width: 100%;
-    height: 12px;
-    background-color: var(--ping-gray-light);
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid var(--ping-gray-medium);
-}
-
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--ping-red) 0%, #d10024 100%);
-    border-radius: 6px;
-    width: 0%;
-    transition: width 0.3s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Steps Section */
-.spinner-steps {
-    padding: 1.5rem 2rem;
-    background-color: white;
-    border-bottom: 1px solid var(--ping-gray-light);
 }
 
 .spinner-step {
@@ -756,11 +751,11 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     align-items: center;
     margin: 1rem 0;
     padding: 1rem;
-    background-color: var(--ping-gray-light);
-    border: 1px solid var(--ping-gray-medium);
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
     font-size: 0.95rem;
-    color: var(--text-primary);
+    color: #374151;
     transition: all 0.3s ease;
 }
 
@@ -808,17 +803,38 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     text-align: center;
 }
 
-/* Status Summary */
-.spinner-status-summary {
-    padding: 1.5rem 2rem;
-    background-color: var(--ping-blue-secondary);
-    border-bottom: 1px solid var(--ping-gray-light);
+.operation-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+}
+
+.info-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #374151;
+    min-width: 100px;
+}
+
+.info-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #dc2626;
+    text-align: right;
+    font-family: 'Courier New', monospace;
 }
 
 .status-summary-header h4 {
     font-size: 1.1rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #374151;
     margin: 0 0 1rem 0;
     text-align: center;
 }
@@ -837,13 +853,13 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     padding: 1rem;
     background-color: white;
     border-radius: 8px;
-    border: 1px solid var(--ping-gray-light);
+    border: 1px solid #e5e7eb;
 }
 
 .summary-label {
     font-size: 0.85rem;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: #6b7280;
     margin-bottom: 0.5rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -853,143 +869,20 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     font-size: 1.5rem;
     font-weight: 700;
     font-family: 'Courier New', monospace;
-    color: var(--text-primary);
+    color: #374151;
 }
 
 .summary-value.success {
-    color: var(--text-success);
+    color: #059669;
 }
 
 .summary-value.error {
-    color: var(--text-error);
+    color: #dc2626;
 }
 
-/* Footer Section */
-.spinner-footer-btn-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 1.5rem 2rem;
-    background-color: white;
-    border-radius: 0 0 12px 12px;
-}
-
-.close-btn {
-    background: linear-gradient(135deg, var(--ping-red) 0%, #d10024 100%);
-    color: white;
-    border: none;
-    padding: 1rem 3rem;
-    border-radius: 8px;
-    font-size: 1.1rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 4px 12px rgba(230, 0, 40, 0.3);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.close-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(230, 0, 40, 0.4);
-}
-
-/* Legacy spinner styles for backward compatibility */
-.spinner {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 10001;
-}
-
-.spinner-content {
-    background-color: var(--surface);
-    padding: 2rem;
-    border-radius: 8px;
-    text-align: center;
-    min-width: 400px;
-    box-shadow: var(--shadow);
-}
-
-.spinner-icon {
-    width: 60px;
-    height: 60px;
-    border: 5px solid var(--ping-gray-light);
-    border-top: 5px solid var(--ping-red);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 1.5rem auto;
-}
-
-.spinner-status {
-    margin-top: 1rem;
-    font-size: 1rem;
-    color: var(--text-primary);
-    font-weight: 500;
-}
-
-.spinner-progress {
-    margin-top: 0.5rem;
-    font-weight: 600;
-    color: var(--ping-red);
-    font-size: 1.1rem;
-}
-
-/* Spinner Steps Container */
-#spinner-steps {
-    margin-top: 1.5rem;
-    text-align: left;
-}
-
-.status-step {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    margin: 0.75rem 0;
-    padding: 0.75rem;
-    background-color: var(--ping-white);
-    border: 1px solid var(--ping-gray-light);
-    border-radius: 6px;
-    font-size: 0.95rem;
-    color: var(--text-primary);
-}
-
-.status-step .step-text {
-    flex: 1;
-    font-weight: 500;
-}
-
-.status-step .step-status {
-    margin-left: 1rem;
-    font-size: 1.2rem;
-    font-weight: bold;
-    min-width: 24px;
-    text-align: center;
-}
-
-/* Clean status icons - no background circles */
-.status-step .step-status.success {
-    color: var(--text-success);
-}
-
-.status-step .step-status.error {
-    color: var(--text-error);
-}
-
-.status-step .step-status.loading {
-    color: var(--ping-red);
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-/* Hide status icons initially */
-.status-step .step-status:empty {
-    display: none;
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* Spinner Progress Display */
@@ -1148,9 +1041,6 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     transform: translateY(-1px);
 }
 
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-
 /* Tooltip Info Icons */
 .tooltip-icon {
     display: inline-flex;
@@ -1209,6 +1099,12 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     z-index: 10000;
 }
 
+.modal-content, .modal-header, .modal-body, .modal-footer {
+    background: #fff !important;
+    color: #222 !important;
+    z-index: 10001;
+}
+
 .modal-content {
     background: var(--surface);
     border-radius: 8px;
@@ -1216,6 +1112,7 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     max-width: 500px;
     width: 90%;
     overflow: hidden;
+    color: var(--text-primary);
 }
 
 .modal-header {
@@ -1224,6 +1121,7 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
 }
 
 .modal-close {
@@ -1236,6 +1134,7 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 
 .modal-body {
     padding: 1.5rem;
+    color: var(--text-primary);
 }
 
 .modal-footer {
@@ -1244,6 +1143,7 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     justify-content: flex-end;
     gap: 1rem;
     border-top: 1px solid var(--border);
+    color: var(--text-primary);
 }
 
 /* Results Table */
