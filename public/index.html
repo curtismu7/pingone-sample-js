@@ -13,6 +13,9 @@
     <header class="header">
         <div class="header-content">
             <div class="logo-container">
+                <button class="mobile-menu-toggle" id="mobile-menu-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
                 <img src="images/logo.png" alt="Ping Identity" class="logo">
                 <h1>User Management</h1>
             </div>
@@ -22,144 +25,271 @@
         </div>
     </header>
 
-    <!-- Navigation -->
-    <nav class="sidebar">
-        <div class="nav-logo">
-            <img src="images/logo.png" alt="Ping Identity" class="nav-logo-img">
-        </div>
-        <ul class="nav-menu">
-            <li class="nav-item">
-                <a href="index.html" class="nav-link active">
-                    <i class="fas fa-users nav-icon"></i>
-                    <span>User Management</span>
-                </a>
-            </li>
-            <li class="nav-item nav-dropdown">
-                <a href="#" class="nav-link" id="user-actions-toggle">
-                    <i class="fas fa-bolt nav-icon"></i>
-                    <span>Quick Actions</span>
-                    <i class="fas fa-chevron-right nav-arrow"></i>
-                </a>
-                <ul class="nav-submenu hidden">
-                    <li><a href="#import-panel" class="nav-submenu-link quick-action" data-action="import"><i class="fas fa-upload nav-icon"></i> <span>Import Users</span></a></li>
-                    <li><a href="#modify" class="nav-submenu-link disabled" data-action="modify"><i class="fas fa-pencil-alt nav-icon"></i> <span>Modify Users</span></a></li>
-                    <li><a href="#delete" class="nav-submenu-link disabled" data-action="delete"><i class="fas fa-trash-alt nav-icon"></i> <span>Delete Users</span></a></li>
-                </ul>
-            </li>
-        </ul>
-        <div class="sidebar-footer">
-            <a href="settings.html" class="nav-link">
-                <i class="fas fa-cog nav-icon"></i>
-                <span>Configuration</span>
-            </a>
-        </div>
-    </nav>
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <h1>User Management</h1>
-
-        <!-- Import Panel -->
-        <section class="config-group" id="import-panel">
-            <div class="group-header">
-                <h2>User Import</h2>
+    <!-- App Container for Push Behavior -->
+    <div class="app-container">
+        <!-- Navigation -->
+        <nav class="sidebar">
+            <div class="nav-logo">
+                <img src="images/logo.png" alt="Ping Identity" class="nav-logo-img">
             </div>
-            <div class="group-content">
-                <div class="form-group">
-                    <label for="csv-file">Choose CSV File</label>
-                    <input type="file" id="csv-file" accept=".csv" class="file-input input-50char"
-                           data-tippy-content="Select a CSV file containing user data to import.">
-                </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="index.html" class="nav-link active">
+                        <i class="fas fa-users nav-icon"></i>
+                        <span>User Management</span>
+                    </a>
+                </li>
+                <li class="nav-item nav-dropdown">
+                    <a href="#" class="nav-link" id="quick-actions-toggle">
+                        <i class="fas fa-bolt nav-icon"></i>
+                        <span>Quick Actions</span>
+                        <i class="fas fa-chevron-down nav-arrow"></i>
+                    </a>
+                    <ul class="nav-submenu">
+                        <li><a href="#import-panel" class="nav-submenu-link quick-action" data-action="import">
+                            <i class="fas fa-upload nav-icon"></i> 
+                            <span>Import Users</span>
+                        </a></li>
+                        <li><a href="#delete-panel" class="nav-submenu-link quick-action" data-action="delete-bulk">
+                            <i class="fas fa-trash-alt nav-icon"></i> 
+                            <span>Delete Bulk Users</span>
+                        </a></li>
+                        <li><a href="#delete-panel" class="nav-submenu-link quick-action" data-action="delete-single">
+                            <i class="fas fa-user-times nav-icon"></i> 
+                            <span>Delete Single User</span>
+                        </a></li>
+                        <li><a href="#modify-panel" class="nav-submenu-link quick-action" data-action="modify">
+                            <i class="fas fa-edit nav-icon"></i> 
+                            <span>Modify Users</span>
+                        </a></li>
+                    </ul>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <a href="settings.html" class="nav-link">
+                    <i class="fas fa-cog nav-icon"></i>
+                    <span>Configuration</span>
+                </a>
+            </div>
+        </nav>
 
-                <!-- File Metadata -->
-                <div id="file-metadata" class="file-metadata hidden">
-                    <div class="metadata-item">
-                        <strong>Filename:</strong> <span id="meta-filename"></span>
-                    </div>
-                    <div class="metadata-item">
-                        <strong>Total Records:</strong> <span id="meta-total-records"></span>
-                    </div>
-                    <div class="metadata-item">
-                        <strong>Valid Rows:</strong> <span id="meta-valid-rows" class="success-text"></span>
-                    </div>
-                    <div class="metadata-item">
-                        <strong>Invalid Rows:</strong> <span id="meta-invalid-rows" class="error-text"></span>
-                    </div>
-                </div>
+        <!-- Main Content -->
+        <main class="main-content">
+            <h1>User Management</h1>
 
-                <div class="import-controls">
+            <!-- CSV File Selection Section -->
+            <section class="csv-file-section">
+                <div class="group-header">
+                    <h2>CSV File Selection</h2>
+                </div>
+                <div class="group-content">
                     <div class="form-group">
-                        <label for="records-per-page">Records/Page</label>
-                        <select id="records-per-page" name="recordsPerPage" class="input-3char"
-                                data-tippy-content="Number of records to display per page in the results table.">
-                            <option value="10">10</option>
-                            <option value="25" selected>25</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                        </select>
+                        <label for="csv-file">Choose CSV File</label>
+                        <input type="file" id="csv-file" accept=".csv" class="file-input input-50char"
+                               data-tippy-content="Select a CSV file containing user data for import, modify, or delete operations.">
                     </div>
-                    <button id="import-btn" class="btn btn-danger" 
-                            data-tippy-content="Starts the user import process.">
-                        Import Users
-                    </button>
-                </div>
-                
-                <!-- Import Progress -->
-                <div id="import-progress" class="import-progress hidden">
-                    <div class="progress-bar">
-                        <div id="progress-fill" class="progress-fill"></div>
-                    </div>
-                    <div class="progress-text">
-                        <span id="progress-status">Preparing...</span>
-                        <span id="progress-count">0 / 0</span>
-                    </div>
-                </div>
-            </div>
-        </section>
 
-        <!-- Results Panel -->
-        <section id="results-panel" class="config-group hidden">
-            <div class="group-header">
-                <h2>Import Results</h2>
-                <div class="panel-actions">
-                    <button id="export-results" class="btn btn-secondary btn-sm"
-                            data-tippy-content="Download the import results as a CSV file.">
-                        <i class="fas fa-download"></i> Export
-                    </button>
-                    <button id="modify-selected-btn" class="btn btn-secondary btn-sm"
-                            data-tippy-content="Modify selected users (coming soon).">
-                        <i class="fas fa-pencil-alt"></i> Modify
-                    </button>
-                    <button id="delete-selected-btn" class="btn btn-danger btn-sm"
-                            data-tippy-content="Delete selected users (coming soon).">
-                        <i class="fas fa-trash-alt"></i> Delete
-                    </button>
+                    <!-- Current File Status -->
+                    <div id="current-file-status" class="file-status-box hidden">
+                        <div class="status-header centered">
+                            <strong>Selected File:</strong> <span id="current-file-name"></span>
+                            <span id="file-source-label" class="file-source"></span>
+                        </div>
+                        <div id="current-file-details" class="file-details">
+                            <!-- File details will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- File Metadata -->
+                    <div id="file-metadata" class="file-metadata hidden">
+                        <div class="metadata-item">
+                            <strong>Filename:</strong> <span id="meta-filename"></span>
+                        </div>
+                        <div class="metadata-item">
+                            <strong>Total Records:</strong> <span id="meta-total-records"></span>
+                        </div>
+                        <div class="metadata-item">
+                            <strong>Valid Rows:</strong> <span id="meta-valid-rows" class="success-text"></span>
+                        </div>
+                        <div class="metadata-item">
+                            <strong>Invalid Rows:</strong> <span id="meta-invalid-rows" class="error-text"></span>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="group-content">
-                <div class="results-table-container">
-                    <table id="results-table" class="results-table">
-                        <thead>
-                            <tr>
-                                <th><input type="checkbox" id="select-all-users"></th>
-                                <th>Username</th>
-                                <th>Status</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody id="results-tbody"></tbody>
-                    </table>
+            </section>
+
+            <!-- Import Panel -->
+            <section class="config-group" id="import-panel">
+                <div class="group-header">
+                    <h2>User Import</h2>
                 </div>
-                
-                <!-- Pagination -->
-                <div id="pagination" class="pagination hidden">
-                    <button id="prev-page" class="btn btn-secondary">Previous</button>
-                    <span id="page-info" class="page-info"></span>
-                    <button id="next-page" class="btn btn-secondary">Next</button>
+                <div class="group-content">
+                    <!-- Environment Information -->
+                    <div id="environment-info" class="environment-info hidden">
+                        <div class="info-row">
+                            <strong>Environment:</strong> <span id="env-name">Loading...</span>
+                        </div>
+                        <div class="info-row">
+                            <strong>Environment ID:</strong> <span id="env-id">Loading...</span>
+                        </div>
+                        <div class="info-row">
+                            <strong>Client ID:</strong> <span id="client-id-display">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="import-controls">
+                        <button id="import-btn" class="btn-pill">
+                            Import Users
+                            <span class="tooltip-icon" data-tippy-content="Starts the user import process using the selected CSV file.">i</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Import Status -->
+                    <div id="import-status" class="operation-status hidden">
+                        <div class="status-label">Status: <span id="import-status-text">Ready</span></div>
+                        <div id="import-error-details" class="error-details hidden"></div>
+                    </div>
+                    
+                    <!-- Import Progress -->
+                    <div id="import-progress" class="import-progress hidden">
+                        <div class="progress-bar">
+                            <div id="progress-fill" class="progress-fill"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span id="progress-status">Preparing...</span>
+                            <span id="progress-count">0 / 0</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </section>
-    </main>
+            </section>
+
+            <!-- Modify Panel -->
+            <section class="config-group" id="modify-panel">
+                <div class="group-header">
+                    <h2>Modify Users</h2>
+                    <p class="group-description">Update existing users by uploading a CSV file with user modifications.</p>
+                </div>
+                <div class="group-content">
+                    <div class="action-buttons">
+                        <button type="button" id="modify-btn" class="btn-pill">
+                            <i class="fas fa-pencil-alt"></i> Modify Users
+                            <span class="tooltip-icon" data-tippy-content="Start the user modification process using the selected CSV file.">i</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Modify Status -->
+                    <div id="modify-status" class="operation-status hidden">
+                        <div class="status-label">Status: <span id="modify-status-text">Ready</span></div>
+                        <div id="modify-error-details" class="error-details hidden"></div>
+                    </div>
+
+                    <div class="info-box">
+                        <h4>CSV Format for Modifications:</h4>
+                        <ul>
+                            <li><strong>userId</strong> - PingOne User ID (required if no username)</li>
+                            <li><strong>username</strong> - Username (required if no userId)</li>
+                            <li><strong>email</strong> - Email address</li>
+                            <li><strong>firstName/givenName</strong> - First name</li>
+                            <li><strong>lastName/familyName</strong> - Last name</li>
+                            <li><strong>enabled</strong> - true/false to enable/disable user</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Delete Panel -->
+            <section class="config-group" id="delete-panel">
+                <div class="group-header">
+                    <h2>Delete Users</h2>
+                    <p class="group-description">Remove users from PingOne. This action cannot be undone.</p>
+                </div>
+                <div class="group-content">
+                    <div class="warning-box">
+                        <h4>⚠️ Warning:</h4>
+                        <p>User deletion is permanent and cannot be undone. Please ensure you have backups of any important user data before proceeding.</p>
+                    </div>
+
+                    <!-- Bulk Delete Section -->
+                    <div class="delete-section">
+                        <h3>Bulk Delete from CSV</h3>
+                        <div class="action-buttons">
+                            <button type="button" id="delete-btn" class="btn-pill">
+                                <i class="fas fa-trash-alt"></i> Delete Users
+                                <span class="tooltip-icon" data-tippy-content="Start the bulk user deletion process using the selected CSV file.">i</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Delete Status -->
+                        <div id="delete-status" class="operation-status hidden">
+                            <div class="status-label">Status: <span id="delete-status-text">Ready</span></div>
+                            <div id="delete-error-details" class="error-details hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Single User Delete Section -->
+                    <div class="delete-section">
+                        <h3>Delete Single User</h3>
+                        <form class="form compact-form">
+                            <div class="form-group">
+                                <label for="delete-username" class="with-tooltip">
+                                    Username
+                                    <span class="tooltip-icon" data-tippy-content="Enter the exact username of the user to delete.">i</span>
+                                </label>
+                                <input type="text" id="delete-username" name="deleteUsername" class="input-30char"
+                                       placeholder="Enter username to delete">
+                            </div>
+
+                            <div class="action-buttons">
+                                <button type="button" id="delete-username-btn" class="btn-pill">
+                                    <i class="fas fa-user-times"></i> Delete User
+                                    <span class="tooltip-icon" data-tippy-content="Delete the specified user.">i</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Panel -->
+            <section id="results-panel" class="config-group hidden">
+                <div class="group-header">
+                    <h2 id="results-title">Operation Results</h2>
+                    <div class="panel-actions">
+                        <button id="export-results" class="btn-pill">
+                            <i class="fas fa-download"></i> Export Results
+                            <span class="tooltip-icon" data-tippy-content="Download the operation results as a CSV file.">i</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="group-content">
+                    <div class="results-table-container">
+                        <table id="results-table" class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Username</th>
+                                    <th>Status</th>
+                                    <th>Message</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-table-body">
+                                <!-- Results will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    <div id="results-pagination" class="pagination-container">
+                        <!-- Pagination will be populated here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
 
     <!-- Footer -->
     <footer class="footer">
@@ -177,8 +307,8 @@
             </div>
             <div id="modal-body" class="modal-body"></div>
             <div class="modal-footer">
-                <button id="modal-confirm" class="btn btn-danger">OK</button>
-                <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="modal-confirm" class="btn-pill">OK</button>
+                <button id="modal-cancel" class="btn-pill">Cancel</button>
             </div>
         </div>
     </div>
@@ -188,12 +318,14 @@
         <div class="spinner-content">
             <div class="spinner-icon"></div>
             <p id="spinner-text">Loading...</p>
+            <button id="spinner-cancel" class="btn-pill spinner-cancel-btn">Cancel</button>
         </div>
     </div>
 
     <!-- Scripts -->
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
+    <script src="https://unpkg.com/papaparse@5"></script>
     <script src="js/utils.js"></script>
     <script src="js/main.js"></script>
 </body>

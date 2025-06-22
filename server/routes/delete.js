@@ -170,6 +170,11 @@ router.post('/by-username', async (req, res) => {
         const token = await getWorkerToken(environmentId, clientId, clientSecret);
         
         // First, find the user by username
+        logger.info('Searching for user', {
+            username,
+            filter: `username eq "${username}"`
+        });
+        
         const searchResponse = await axios.get(
             `https://api.pingone.com/v1/environments/${environmentId}/users`,
             {
@@ -183,13 +188,30 @@ router.post('/by-username', async (req, res) => {
             }
         );
 
+        logger.info('Search response', {
+            username,
+            found: searchResponse.data._embedded?.users?.length || 0,
+            total: searchResponse.data.count || 0
+        });
+
         if (!searchResponse.data._embedded || !searchResponse.data._embedded.users || searchResponse.data._embedded.users.length === 0) {
+            logger.warn('User not found in search', {
+                username,
+                responseData: searchResponse.data
+            });
             return res.status(404).json({
-                error: 'User not found'
+                error: 'User not found',
+                details: `No user found with username: ${username}`
             });
         }
 
         const user = searchResponse.data._embedded.users[0];
+        
+        logger.info('Found user, attempting deletion', {
+            username,
+            userId: user.id,
+            userEmail: user.email
+        });
         
         // Delete the user
         await axios.delete(
@@ -218,21 +240,26 @@ router.post('/by-username', async (req, res) => {
         logger.error('Delete user by username error', {
             username: req.body.username,
             error: error.message,
-            response: error.response?.data
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            responseData: error.response?.data,
+            stack: error.stack
         });
 
         if (error.response?.status === 404) {
             res.status(404).json({
-                error: 'User not found'
+                error: 'User not found',
+                details: error.response?.data || error.message
             });
         } else if (error.response?.status === 403) {
             res.status(403).json({
-                error: 'Insufficient permissions to delete user'
+                error: 'Insufficient permissions to delete user',
+                details: error.response?.data || error.message
             });
         } else {
             res.status(500).json({
                 error: 'Failed to delete user',
-                details: error.message
+                details: error.response?.data || error.message
             });
         }
     }

@@ -1,0 +1,4 @@
+userId,username,email,firstName,lastName,enabled
+12345678-1234-1234-1234-123456789012,johndoe,john.doe.new@example.com,John,Doe,true
+23456789-2345-2345-2345-234567890123,janedoe,jane.doe.updated@example.com,Jane,Doe,true
+34567890-3456-3456-3456-345678901234,bobsmith,bob.smith.modified@example.com,Robert,Smith,false 

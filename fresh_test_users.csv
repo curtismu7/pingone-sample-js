@@ -1,0 +1,4 @@
+username,email,firstName,lastName,password,active
+newuser001,newuser001@mailinator.com,Alice,Johnson,TestPass123!,true
+newuser002,newuser002@mailinator.com,Bob,Wilson,TestPass123!,true
+newuser003,newuser003@mailinator.com,Carol,Davis,TestPass123!,true 

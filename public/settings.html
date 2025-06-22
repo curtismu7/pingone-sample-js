@@ -13,142 +13,250 @@
     <header class="header">
         <div class="header-content">
             <div class="logo-container">
+                <button class="mobile-menu-toggle" id="mobile-menu-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
                 <img src="images/logo.png" alt="Ping Identity" class="logo">
                 <h1>Configuration</h1>
-            </div>
-            <div class="header-actions">
             </div>
         </div>
     </header>
 
-    <!-- Navigation -->
-    <nav class="sidebar">
-        <div class="nav-logo">
-            <img src="images/logo.png" alt="Ping Identity" class="nav-logo-img">
-        </div>
-        <ul class="nav-menu">
-            <li class="nav-item">
-                <a href="index.html" class="nav-link">
-                    <i class="fas fa-users nav-icon"></i>
-                    <span>User Management</span>
-                </a>
-            </li>
-            <li class="nav-item nav-dropdown">
-                <a href="#" class="nav-link" id="user-actions-toggle">
-                    <i class="fas fa-bolt nav-icon"></i>
-                    <span>Quick Actions</span>
-                    <i class="fas fa-chevron-right nav-arrow"></i>
-                </a>
-                <ul class="nav-submenu hidden">
-                    <li><a href="index.html#import" class="nav-submenu-link"><i class="fas fa-upload nav-icon"></i> <span>Import Users</span></a></li>
-                    <li><a href="index.html#modify" class="nav-submenu-link disabled"><i class="fas fa-pencil-alt nav-icon"></i> <span>Modify Users</span></a></li>
-                    <li><a href="index.html#delete" class="nav-submenu-link disabled"><i class="fas fa-trash-alt nav-icon"></i> <span>Delete Users</span></a></li>
-                </ul>
-            </li>
-        </ul>
-        <div class="sidebar-footer">
-            <a href="settings.html" class="nav-link active">
-                <i class="fas fa-cog nav-icon"></i>
-                <span>Configuration</span>
-            </a>
-        </div>
-    </nav>
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <h1>Configuration</h1>
-
-        <!-- Authentication Configuration Group -->
-        <section class="config-group" id="auth-config">
-            <div class="group-header">
-                <h2>Authentication Configuration</h2>
+    <!-- App Container for Push Behavior -->
+    <div class="app-container">
+        <!-- Navigation -->
+        <nav class="sidebar">
+            <div class="nav-logo">
+                <img src="images/logo.png" alt="Ping Identity" class="nav-logo-img">
             </div>
-            <div class="group-content">
-                <form id="credentials-form" class="form compact-form">
-                    <div class="form-group">
-                        <label for="environment-id">Environment ID</label>
-                        <input type="text" id="environment-id" name="environmentId" class="input-30char" required 
-                               data-tippy-content="Your PingOne environment identifier.">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="client-id">Client ID</label>
-                        <input type="text" id="client-id" name="clientId" class="input-30char" required
-                               data-tippy-content="Your PingOne application's client identifier.">
-                    </div>
-                    
-                    <div class="form-group client-secret-group">
-                        <label for="client-secret">Client Secret</label>
-                        <div class="input-with-icon">
-                            <input type="password" id="client-secret" name="clientSecret" class="input-30char"
-                                   data-tippy-content="Your PingOne application's client secret. Omit if not required.">
-                            <i class="fas fa-eye" id="toggle-secret"></i>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="index.html" class="nav-link">
+                        <i class="fas fa-users nav-icon"></i>
+                        <span>User Management</span>
+                    </a>
+                </li>
+                <li class="nav-item nav-dropdown">
+                    <a href="#" class="nav-link" id="quick-actions-toggle">
+                        <i class="fas fa-bolt nav-icon"></i>
+                        <span>Quick Actions</span>
+                        <i class="fas fa-chevron-down nav-arrow"></i>
+                    </a>
+                    <ul class="nav-submenu">
+                        <li><a href="index.html#import-panel" class="nav-submenu-link quick-action" data-action="import">
+                            <i class="fas fa-upload nav-icon"></i> 
+                            <span>Import Users</span>
+                        </a></li>
+                        <li><a href="index.html#delete-panel" class="nav-submenu-link quick-action" data-action="delete-bulk">
+                            <i class="fas fa-trash-alt nav-icon"></i> 
+                            <span>Delete Bulk Users</span>
+                        </a></li>
+                        <li><a href="index.html#delete-panel" class="nav-submenu-link quick-action" data-action="delete-single">
+                            <i class="fas fa-user-times nav-icon"></i> 
+                            <span>Delete Single User</span>
+                        </a></li>
+                        <li><a href="index.html#modify-panel" class="nav-submenu-link quick-action" data-action="modify">
+                            <i class="fas fa-edit nav-icon"></i> 
+                            <span>Modify Users</span>
+                        </a></li>
+                    </ul>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <a href="settings.html" class="nav-link active">
+                    <i class="fas fa-cog nav-icon"></i>
+                    <span>Configuration</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <h1>Configuration</h1>
+
+            <!-- Authentication Configuration Group -->
+            <section class="config-group" id="auth-config">
+                <div class="group-header">
+                    <h2>Authentication Configuration</h2>
+                </div>
+                <div class="group-content">
+                    <form id="credentials-form" class="form compact-form">
+                        <div class="form-group">
+                            <label for="environment-id" class="with-tooltip">
+                                Environment ID
+                                <span class="tooltip-icon" data-tippy-content="Your PingOne environment identifier.">i</span>
+                            </label>
+                            <input type="text" id="environment-id" name="environmentId" class="input-30char" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="client-id" class="with-tooltip">
+                                Client ID
+                                <span class="tooltip-icon" data-tippy-content="Your PingOne application's client identifier.">i</span>
+                            </label>
+                            <input type="text" id="client-id" name="clientId" class="input-30char" required>
+                        </div>
+                        
+                        <div class="form-group client-secret-group">
+                            <label for="client-secret" class="with-tooltip">
+                                Client Secret
+                                <span class="tooltip-icon" data-tippy-content="Your PingOne application's client secret. Omit if not required.">i</span>
+                            </label>
+                            <div class="input-with-icon">
+                                <input type="password" id="client-secret" name="clientSecret" class="input-30char">
+                                <i class="fas fa-eye" id="toggle-secret"></i>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="base-url" class="with-tooltip">
+                                Base URL
+                                <span class="tooltip-icon" data-tippy-content="The base URL for the PingOne API for your region.">i</span>
+                            </label>
+                            <input type="url" id="base-url" name="baseUrl" value="https://api.pingone.com" class="input-30char" required>
+                        </div>
+                        
+                        <div class="form-group form-row">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="use-client-secret" name="useClientSecret" checked>
+                                <span>Use Client Secret</span>
+                                <span class="tooltip-icon" data-tippy-content="Check this if your PingOne application requires a client secret for authentication.">i</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="save-credentials" name="saveCredentials">
+                                <span>Save Credentials</span>
+                                <span class="tooltip-icon" data-tippy-content="Check this to save your credentials securely in the browser's local storage for future sessions.">i</span>
+                            </label>
+                        </div>
+
+                        <div class="action-buttons centered">
+                            <button type="button" id="test-credentials" class="btn-pill">
+                                Test Credentials
+                            </button>
+                            <div id="token-status" class="token-status"></div>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Application Settings Group -->
+            <section class="config-group">
+                <div class="group-header">
+                    <h2>Application Settings</h2>
+                </div>
+                <div class="group-content">
+                    <form id="app-settings-form" class="form compact-form">
+                        <div class="form-group">
+                            <label for="default-file" class="with-tooltip">
+                                Default CSV File
+                                <span class="tooltip-icon" data-tippy-content="Select a CSV file to automatically load for import operations.">i</span>
+                            </label>
+                            <input type="file" id="default-file" name="defaultFile" accept=".csv" class="input-50char">
+                            <div id="current-default-file" class="current-file-info"></div>
+                        </div>
+                        
+
+                    </form>
+                </div>
+            </section>
+
+            <!-- CSV Format Configuration for Modifications -->
+            <section class="config-group">
+                <div class="group-header">
+                    <h2>CSV Format Configuration</h2>
+                </div>
+                <div class="group-content">
+                    <div class="csv-format-config">
+                        <h4>Modification Fields</h4>
+                        <p>Select which fields should be included when modifying users:</p>
+                        
+                        <div class="checkbox-grid">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="modify-email" name="modifyFields" value="email" checked>
+                                <span>Email Address</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="modify-firstname" name="modifyFields" value="firstName" checked>
+                                <span>First Name</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="modify-lastname" name="modifyFields" value="lastName" checked>
+                                <span>Last Name</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="modify-username" name="modifyFields" value="username">
+                                <span>Username</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="modify-enabled" name="modifyFields" value="enabled" checked>
+                                <span>Account Status</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="modify-phone" name="modifyFields" value="phone">
+                                <span>Phone Number</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="modify-title" name="modifyFields" value="title">
+                                <span>Job Title</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="modify-department" name="modifyFields" value="department">
+                                <span>Department</span>
+                            </label>
                         </div>
                     </div>
-                    
-                    <div class="form-group">
-                        <label for="base-url">Base URL</label>
-                        <input type="url" id="base-url" name="baseUrl" value="https://api.pingone.com" class="input-30char" required
-                               data-tippy-content="The base URL for the PingOne API for your region.">
-                    </div>
-                    
-                    <div class="form-group form-row">
-                        <label class="checkbox-label" data-tippy-content="Check this if your PingOne application requires a client secret for authentication.">
-                            <input type="checkbox" id="use-client-secret" name="useClientSecret" checked>
-                            <span>Use Client Secret</span>
-                        </label>
-                        <label class="checkbox-label" data-tippy-content="Check this to save your credentials securely in the browser's local storage for future sessions.">
-                            <input type="checkbox" id="save-credentials" name="saveCredentials">
-                            <span>Save Credentials</span>
-                        </label>
-                    </div>
-
-                    <div class="action-buttons centered">
-                        <button type="button" id="test-credentials" class="btn btn-danger">
-                            Test Credentials
-                        </button>
-                        <div id="token-status" class="token-status"></div>
-                    </div>
-                </form>
+                </div>
+            </section>
+            
+            <!-- Save Configuration Action -->
+            <div class="action-buttons centered">
+                <button type="button" id="save-all-settings" class="btn-pill">
+                    Save Configuration
+                </button>
             </div>
-        </section>
 
-        <!-- Application Settings Group -->
-        <section class="config-group">
-            <div class="group-header">
-                <h2>Application Settings</h2>
-            </div>
-            <div class="group-content">
-                <form id="app-settings-form" class="form compact-form">
-                    <div class="form-group">
-                        <label for="default-file">Default CSV File</label>
-                        <input type="file" id="default-file" name="defaultFile" accept=".csv" class="input-50char"
-                               data-tippy-content="Select a CSV file to automatically load for import operations.">
-                        <div id="current-default-file" class="current-file-info"></div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="records-per-page">Records per Page</label>
-                        <select id="records-per-page" name="recordsPerPage" class="input-3char"
-                                data-tippy-content="Number of records to display per page in the results table.">
-                            <option value="10">10</option>
-                            <option value="25" selected>25</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                        </select>
-                    </div>
-                </form>
-            </div>
-        </section>
-        
-        <!-- Save Configuration Action -->
-        <div class="action-buttons">
-            <button type="button" id="save-all-settings" class="btn btn-danger">
-                Save Configuration
-            </button>
-        </div>
+            <br>
+            <br>
 
-    </main>
+            <!-- Logging Configuration Group -->
+            <section class="config-group" id="logging-config">
+                <div class="group-header">
+                    <h2>Logging Configuration</h2>
+                </div>
+                <div class="group-content">
+                    <form id="logging-form" class="form compact-form">
+                        <div class="form-group">
+                            <label for="log-file-name" class="with-tooltip">
+                                Log Filename
+                                <span class="tooltip-icon" data-tippy-content="The name of the file to write logs to on the server.">i</span>
+                            </label>
+                            <input type="text" id="log-file-name" name="logFileName" class="input-30char" 
+                                   value="import-status.log" placeholder="import-status.log">
+                        </div>
+
+                        <div class="logging-controls">
+                            <button type="button" id="start-logging-btn" class="btn-pill">Start Logging</button>
+                            <button type="button" id="stop-logging-btn" class="btn-pill">Stop Logging</button>
+                            <button type="button" id="export-log-btn" class="btn-pill">Export Log</button>
+                            <button type="button" id="clear-log-btn" class="btn-pill">Clear Log</button>
+                        </div>
+                        
+                        <div class="logging-status-container">
+                            <div id="logging-status" class="status-display">
+                                <span class="status-label">Status:</span>
+                                <span class="status-value">Inactive</span>
+                                <span class="status-icon">✗</span>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+        </main>
+    </div>
 
     <!-- Footer -->
     <footer class="footer">
@@ -166,8 +274,8 @@
             </div>
             <div id="modal-body" class="modal-body"></div>
             <div class="modal-footer">
-                <button id="modal-confirm" class="btn btn-primary">OK</button>
-                <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="modal-confirm" class="btn-pill">OK</button>
+                <button id="modal-cancel" class="btn-pill">Cancel</button>
             </div>
         </div>
     </div>
@@ -177,12 +285,14 @@
         <div class="spinner-content">
             <div class="spinner-icon"></div>
             <p id="spinner-text">Loading...</p>
+            <button id="spinner-cancel" class="btn-pill spinner-cancel-btn">Cancel</button>
         </div>
     </div>
 
     <!-- Scripts -->
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
+    <script src="https://unpkg.com/papaparse@5"></script>
     <script src="js/utils.js"></script>
     <script src="js/settings.js"></script>
 </body>
