@@ -742,7 +742,7 @@ class MainPage {
         }
 
         try {
-            utils.showSpinner('Starting Delete Single User...');
+            utils.showOperationSpinner('Starting Delete Single User...');
             utils.log('Delete Single User started – action: Delete Single User', 'info');
 
             // Get worker token
@@ -761,6 +761,7 @@ class MainPage {
             });
 
             if (result.success) {
+                utils.completeOperationSpinner(1, 0); // 1 success, 0 failed
                 utils.showModal('Success', `User "${username}" deleted successfully.`);
                 usernameInput.value = ''; // Clear the input
                 utils.log(`Successfully deleted user: ${username}`, 'info');
@@ -771,6 +772,7 @@ class MainPage {
         } catch (error) {
             console.error('Single delete processing error:', error);
             utils.log(`Failed to delete user: ${username} - ${error.message}`, 'error');
+            utils.failOperationSpinner('step-processing', error.message);
             utils.showModal('Error', `Failed to delete user "${username}": ${error.message}`);
         } finally {
             setTimeout(() => utils.hideSpinner(), 5000);
