@@ -12,6 +12,13 @@ const router = express.Router();
 // DEBUG: Check tokenCache in memory for current token status
 let tokenCache = {};
 
+// Token configuration
+const TOKEN_CONFIG = {
+    CACHE_DURATION: 50 * 60 * 1000, // 50 minutes in milliseconds
+    BUFFER_TIME: 2 * 60 * 1000,     // 2 minutes buffer before expiration
+    MAX_AGE: 60 * 60 * 1000         // 1 hour maximum (PingOne default)
+};
+
 // Helper function to check if token is still valid
 // DEBUG: If tokens expire unexpectedly, check this validation logic
 function isTokenValid(tokenData) {
@@ -19,19 +26,19 @@ function isTokenValid(tokenData) {
         return false;
     }
     
-    // Add 5-minute buffer before expiration
-    const bufferTime = 5 * 60 * 1000; // 5 minutes in milliseconds
     const now = Date.now();
     const expiresAt = tokenData.expiresAt;
     
-    const isValid = now < (expiresAt - bufferTime);
+    // Use 2-minute buffer before expiration for safety
+    const isValid = now < (expiresAt - TOKEN_CONFIG.BUFFER_TIME);
     
     // DEBUG: Log token validation details
     if (!isValid) {
         logManager.info('Token validation failed', {
             now: new Date(now).toISOString(),
             expiresAt: new Date(expiresAt).toISOString(),
-            bufferTime: bufferTime / 1000 + ' seconds'
+            bufferTime: TOKEN_CONFIG.BUFFER_TIME / 1000 + ' seconds',
+            tokenAge: Math.floor((now - tokenData.createdAt) / (60 * 1000)) + ' minutes'
         });
     }
     
@@ -44,6 +51,23 @@ function createCacheKey(environmentId, clientId) {
     return `${environmentId}:${clientId}`;
 }
 
+// Helper function to calculate and log token age information
+function logTokenAgeInfo(tokenData, action = 'reused') {
+    const now = Date.now();
+    const ageMinutes = Math.floor((now - tokenData.createdAt) / (60 * 1000));
+    const timeRemaining = Math.floor((tokenData.expiresAt - now) / (60 * 1000));
+    const agePercentage = Math.round((ageMinutes / (TOKEN_CONFIG.CACHE_DURATION / (60 * 1000))) * 100);
+    
+    logManager.info(`Token ${action} - Age details`, {
+        tokenAge: `${ageMinutes} minutes`,
+        timeRemaining: `${timeRemaining} minutes`,
+        agePercentage: `${agePercentage}% of cache duration`,
+        createdAt: new Date(tokenData.createdAt).toISOString(),
+        expiresAt: new Date(tokenData.expiresAt).toISOString(),
+        cacheDuration: `${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`
+    });
+}
+
 // Get worker token with caching
 const getWorkerToken = async (environmentId, clientId, clientSecret) => {
     const cacheKey = createCacheKey(environmentId, clientId);
@@ -52,12 +76,19 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
     // Check cache first
     const cached = tokenCache[cacheKey];
     if (cached && isTokenValid(cached)) {
+        // Log detailed token age information
+        logTokenAgeInfo(cached, 'reused');
+        
         const timeRemaining = Math.floor((cached.expiresAt - now) / (60 * 1000));
         logManager.logWorkerTokenReused(`${timeRemaining} mins`);
         return cached.access_token;
     }
     
-    logManager.info('Getting new worker token', { environmentId, clientId });
+    logManager.info('Getting new worker token', { 
+        environmentId, 
+        clientId,
+        reason: cached ? 'token expired' : 'no cached token'
+    });
     logManager.logWorkerTokenRequested();
 
     // Construct the correct token endpoint URL
@@ -91,26 +122,34 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
         );
         
         if (response.data && response.data.access_token) {
-            // Cache token for 55 minutes (PingOne tokens typically last 1 hour)
-            const expiresAt = now + (55 * 60 * 1000);
-            tokenCache[cacheKey] = {
+            // Cache token for 50 minutes (as requested)
+            const expiresAt = now + TOKEN_CONFIG.CACHE_DURATION;
+            const tokenData = {
                 access_token: response.data.access_token,
                 token_type: response.data.token_type,
                 expiresAt: expiresAt,
                 environmentId,
                 clientId,
-                createdAt: Date.now()
+                createdAt: now
             };
             
+            tokenCache[cacheKey] = tokenData;
+            
+            // Log detailed token creation information
             logManager.info('Worker token obtained and cached', { 
                 environmentId, 
                 clientId,
                 expiresAt: new Date(expiresAt).toISOString(),
                 tokenType: response.data.token_type,
-                scope: response.data.scope
+                scope: response.data.scope,
+                cacheDuration: `${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`,
+                bufferTime: `${TOKEN_CONFIG.BUFFER_TIME / (60 * 1000)} minutes`
             });
             
-            logManager.logWorkerTokenReceived(55);
+            // Log initial age info (0 minutes old)
+            logTokenAgeInfo(tokenData, 'created');
+            
+            logManager.logWorkerTokenReceived(50);
             
             return response.data.access_token;
         } else {
@@ -161,7 +200,7 @@ router.post('/', async (req, res) => {
         res.json({
             access_token: token,
             token_type: 'Bearer',
-            expires_in: 3300 // 55 minutes in seconds
+            expires_in: 3000 // 50 minutes in seconds
         });
         
     } catch (error) {
@@ -207,7 +246,7 @@ router.post('/worker', async (req, res) => {
             data: {
                 access_token: token,
                 token_type: 'Bearer',
-                expires_in: 3300 // 55 minutes in seconds
+                expires_in: 3000 // 50 minutes in seconds
             }
         });
         
@@ -253,16 +292,33 @@ router.get('/status', (req, res) => {
     
     if (cached && isTokenValid(cached)) {
         const timeRemaining = Math.floor((cached.expiresAt - now) / 1000);
+        const ageMinutes = Math.floor((now - cached.createdAt) / (60 * 1000));
+        const agePercentage = Math.round((ageMinutes / (TOKEN_CONFIG.CACHE_DURATION / (60 * 1000))) * 100);
+        
         res.json({
             valid: true,
             expiresIn: timeRemaining,
-            expiresAt: new Date(cached.expiresAt).toISOString()
+            expiresAt: new Date(cached.expiresAt).toISOString(),
+            age: {
+                minutes: ageMinutes,
+                percentage: agePercentage,
+                createdAt: new Date(cached.createdAt).toISOString()
+            },
+            cache: {
+                duration: TOKEN_CONFIG.CACHE_DURATION / 1000,
+                bufferTime: TOKEN_CONFIG.BUFFER_TIME / 1000
+            }
         });
     } else {
         res.json({
             valid: false,
             expiresIn: 0,
-            expiresAt: null
+            expiresAt: null,
+            age: null,
+            cache: {
+                duration: TOKEN_CONFIG.CACHE_DURATION / 1000,
+                bufferTime: TOKEN_CONFIG.BUFFER_TIME / 1000
+            }
         });
     }
 });
@@ -338,7 +394,7 @@ router.post('/test', async (req, res) => {
             },
             token: {
                 length: token.length,
-                expires_in: 3300
+                expires_in: 3000
             }
         });
         
@@ -392,6 +448,43 @@ router.delete('/', (req, res) => {
     }
     
     res.json({ success: true });
+});
+
+// GET /api/token/cache - Get detailed cache information
+router.get('/cache', (req, res) => {
+    const now = Date.now();
+    const cacheInfo = {
+        totalTokens: Object.keys(tokenCache).length,
+        configuration: {
+            cacheDuration: TOKEN_CONFIG.CACHE_DURATION / 1000,
+            bufferTime: TOKEN_CONFIG.BUFFER_TIME / 1000,
+            maxAge: TOKEN_CONFIG.MAX_AGE / 1000
+        },
+        tokens: []
+    };
+    
+    for (const [cacheKey, tokenData] of Object.entries(tokenCache)) {
+        const [environmentId, clientId] = cacheKey.split(':');
+        const ageMinutes = Math.floor((now - tokenData.createdAt) / (60 * 1000));
+        const timeRemaining = Math.floor((tokenData.expiresAt - now) / (60 * 1000));
+        const isValid = isTokenValid(tokenData);
+        
+        cacheInfo.tokens.push({
+            cacheKey,
+            environmentId: environmentId.substring(0, 8) + '...',
+            clientId: clientId.substring(0, 8) + '...',
+            valid: isValid,
+            age: {
+                minutes: ageMinutes,
+                percentage: Math.round((ageMinutes / (TOKEN_CONFIG.CACHE_DURATION / (60 * 1000))) * 100)
+            },
+            expiresIn: timeRemaining,
+            createdAt: new Date(tokenData.createdAt).toISOString(),
+            expiresAt: new Date(tokenData.expiresAt).toISOString()
+        });
+    }
+    
+    res.json(cacheInfo);
 });
 
 module.exports = {
