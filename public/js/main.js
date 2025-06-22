@@ -510,7 +510,7 @@ class MainPage {
             this.updateOperationStatus('import', 'in-progress');
             
             // Show operation spinner with file info
-            utils.showOperationSpinner(`Starting Import Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name);
+            utils.showOperationSpinner(`Starting Import Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name, 'User Import', this.currentFileInfo.records);
             utils.log(`Import Users started – action: Import Users (${this.currentFileInfo.records} records) from ${this.currentFileInfo.name}`, 'info');
 
             // Start the workflow steps
@@ -589,7 +589,7 @@ class MainPage {
             this.modifyInProgress = true;
             this.updateOperationStatus('modify', 'in-progress');
             
-            utils.showOperationSpinner(`Starting Modify Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name);
+            utils.showOperationSpinner(`Starting Modify Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name, 'User Modification', this.currentFileInfo.records);
             utils.log(`Modify Users started – action: Modify Users (${this.currentFileInfo.records} records)`, 'info');
 
             utils.startWorkflowSteps();
@@ -664,7 +664,7 @@ class MainPage {
             this.deleteInProgress = true;
             this.updateOperationStatus('delete', 'in-progress');
             
-            utils.showOperationSpinner(`Starting Delete Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name);
+            utils.showOperationSpinner(`Starting Delete Users (${this.currentFileInfo.records} records)...`, this.currentFileInfo.name, 'User Deletion', this.currentFileInfo.records);
             utils.log(`Delete Users started – action: Delete Users (${this.currentFileInfo.records} records)`, 'info');
 
             utils.startWorkflowSteps();
@@ -738,7 +738,7 @@ class MainPage {
         }
 
         try {
-            utils.showOperationSpinner('Starting Delete Single User...');
+            utils.showOperationSpinner('Starting Delete Single User...', null, 'Single User Deletion', 1);
             utils.log('Delete Single User started – action: Delete Single User', 'info');
 
             // Get worker token
