@@ -173,17 +173,28 @@ router.post('/', upload.single('csv'), async (req, res) => {
         fs.unlinkSync(req.file.path);
 
         const duration = Date.now() - startTime;
-        logManager.info('CSV import completed', {
+        
+        // Enhanced totals logging
+        logManager.info('IMPORT TOTALS - CSV Import Completed', {
             filename: req.file.originalname,
             totalRecords: users.length,
-            successCount,
-            errorCount,
-            duration: `${duration}ms`
+            successful: successCount,
+            failed: errorCount,
+            skipped: 0, // Import doesn't have skipped records
+            duration: `${duration}ms`,
+            successRate: `${Math.round((successCount / users.length) * 100)}%`
         });
+        
+        // Log structured totals for easy reading
+        logManager.logStructured(`IMPORT TOTALS: Total=${users.length}, Imported=${successCount}, Failed=${errorCount}, Skipped=0, Duration=${duration}ms`);
         
         logManager.logImportOperation(successCount, users.length, duration);
         logManager.logUserAction('operation_complete', {
-            operation: 'Import'
+            operation: 'Import',
+            totalRecords: users.length,
+            successful: successCount,
+            failed: errorCount,
+            skipped: 0
         });
 
         res.json({

@@ -88,6 +88,7 @@ router.post('/bulk', async (req, res) => {
         const results = [];
         let successCount = 0;
         let errorCount = 0;
+        const startTime = Date.now();
 
         for (const userId of userIds) {
             try {
@@ -122,6 +123,21 @@ router.post('/bulk', async (req, res) => {
             }
         }
 
+        const duration = Date.now() - startTime;
+        
+        // Enhanced totals logging
+        logManager.info('DELETE TOTALS - Bulk User Deletion Completed', {
+            totalRecords: userIds.length,
+            successful: successCount,
+            failed: errorCount,
+            skipped: 0, // Delete doesn't have skipped records
+            duration: `${duration}ms`,
+            successRate: `${Math.round((successCount / userIds.length) * 100)}%`
+        });
+        
+        // Log structured totals for easy reading
+        logManager.logStructured(`DELETE TOTALS: Total=${userIds.length}, Deleted=${successCount}, Failed=${errorCount}, Skipped=0, Duration=${duration}ms`);
+        
         logManager.info('Bulk user deletion completed', {
             total: userIds.length,
             successCount,

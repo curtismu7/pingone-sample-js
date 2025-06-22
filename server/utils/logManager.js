@@ -213,30 +213,40 @@ class LogManager {
     }
 
     logImportOperation(successCount, totalCount, duration) {
-        const failedCount = totalCount - successCount;
-        if (failedCount > 0) {
-            this.logStructured(`Imported ${successCount} users (${failedCount} failed) in ${duration}ms.`);
-        } else {
-            this.logStructured(`Imported ${successCount} users in ${duration}ms.`);
-        }
+        this.logStructured(`IMPORT OPERATION COMPLETE: ${successCount}/${totalCount} users imported successfully in ${duration}ms`);
+        this.info('Import operation summary', {
+            totalRecords: totalCount,
+            successful: successCount,
+            failed: totalCount - successCount,
+            skipped: 0,
+            duration: `${duration}ms`,
+            successRate: `${Math.round((successCount / totalCount) * 100)}%`
+        });
     }
 
     logModifyOperation(successCount, totalCount, duration) {
-        const failedCount = totalCount - successCount;
-        if (failedCount > 0) {
-            this.logStructured(`Modified ${successCount} users (${failedCount} failed) in ${duration}ms.`);
-        } else {
-            this.logStructured(`Modified ${successCount} users in ${duration}ms.`);
-        }
+        this.logStructured(`MODIFY OPERATION COMPLETE: ${successCount}/${totalCount} users modified successfully in ${duration}ms`);
+        this.info('Modify operation summary', {
+            totalRecords: totalCount,
+            successful: successCount,
+            failed: totalCount - successCount,
+            skipped: 0,
+            duration: `${duration}ms`,
+            successRate: `${Math.round((successCount / totalCount) * 100)}%`
+        });
     }
 
     logDeleteOperation(successCount, totalCount, notFoundCount = 0, duration) {
-        const failedCount = totalCount - successCount - notFoundCount;
-        let message = `Deleted ${successCount} users`;
-        if (notFoundCount > 0) message += ` (${notFoundCount} not found)`;
-        if (failedCount > 0) message += ` (${failedCount} failed)`;
-        message += ` in ${duration}ms.`;
-        this.logStructured(message);
+        this.logStructured(`DELETE OPERATION COMPLETE: ${successCount}/${totalCount} users deleted successfully in ${duration}ms`);
+        this.info('Delete operation summary', {
+            totalRecords: totalCount,
+            successful: successCount,
+            failed: totalCount - successCount - notFoundCount,
+            notFound: notFoundCount,
+            skipped: 0,
+            duration: `${duration}ms`,
+            successRate: `${Math.round((successCount / totalCount) * 100)}%`
+        });
     }
 
     logUserAction(action, details) {
