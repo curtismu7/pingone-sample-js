@@ -82,8 +82,25 @@ async function runComprehensiveTest() {
         }, importCsv);
 
         await page.click('#import-btn');
-        log('Import initiated. Waiting for completion...');
-        
+        log('Import initiated. Waiting for progress...');
+
+        // Verify spinner responsive styles
+        const spinnerStyles = await page.evaluate(() => {
+            const spinner = document.querySelector('.spinner-container');
+            if (!spinner) return null;
+            const styles = window.getComputedStyle(spinner);
+            return {
+                maxHeight: styles.maxHeight,
+                overflowY: styles.overflowY,
+                viewportHeight: window.innerHeight
+            };
+        });
+        log(`Computed spinner styles: maxHeight=${spinnerStyles.maxHeight}, overflowY=${spinnerStyles.overflowY}`);
+        assert.strictEqual(spinnerStyles.overflowY, 'auto', 'Spinner container should have overflow-y: auto');
+        const spinnerMaxHeight = parseFloat(spinnerStyles.maxHeight);
+        assert.ok(spinnerMaxHeight <= (spinnerStyles.viewportHeight * 0.9), `Spinner max-height (${spinnerMaxHeight}px) should be <= 90% of viewport height (${spinnerStyles.viewportHeight}px)`);
+        log('✅ Spinner responsive styles are correct.');
+
         await page.waitForFunction(
             () => document.querySelector('#spinner-subtitle')?.innerText.includes('Import operation completed'),
             { timeout: 30000 }
@@ -106,7 +123,7 @@ async function runComprehensiveTest() {
         }, modifyCsv);
 
         await page.click('#modify-btn');
-        log('Modify initiated. Waiting for completion...');
+        log('Modify initiated. Waiting for progress...');
 
         await page.waitForFunction(
             () => document.querySelector('#spinner-subtitle')?.innerText.includes('Modify operation completed'),
@@ -131,7 +148,7 @@ async function runComprehensiveTest() {
         }, deleteCsv);
         
         await page.click('#delete-btn');
-        log('Delete initiated. Waiting for completion...');
+        log('Delete initiated. Waiting for progress...');
 
         await page.waitForFunction(
             () => document.querySelector('#spinner-subtitle')?.innerText.includes('Delete operation completed'),
