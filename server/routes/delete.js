@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const logManager = require('../utils/logManager');
-const { getWorkerToken } = require('./token');
+const { getWorkerToken, getUserIdByUsername } = require('./token');
 
 const router = express.Router();
 
@@ -460,6 +460,40 @@ router.post('/', async (req, res) => {
             error: 'Failed to perform bulk user deletion',
             details: error.message
         });
+    }
+});
+
+// POST /api/delete/user - Delete a single user by username
+router.post('/user', async (req, res) => {
+    const { username, environmentId, clientId, clientSecret } = req.body;
+
+    if (!username || !environmentId || !clientId || !clientSecret) {
+        return res.status(400).json({ success: false, message: 'Missing required fields.' });
+    }
+
+    try {
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        const userId = await getUserIdByUsername(username, environmentId, token);
+
+        if (!userId) {
+            return res.status(404).json({ success: false, message: `User '${username}' not found.` });
+        }
+
+        await deleteUserById(userId, environmentId, token);
+
+        const result = {
+            username,
+            status: 'deleted',
+            message: 'User deleted successfully',
+        };
+
+        logManager.info('Single user deleted successfully', { username, userId });
+        res.json({ success: true, results: [result] });
+
+    } catch (error) {
+        const errorMessage = error.response?.data?.details?.[0]?.message || error.message;
+        logManager.error('Failed to delete single user', { username, error: errorMessage });
+        res.status(500).json({ success: false, message: errorMessage });
     }
 });
 

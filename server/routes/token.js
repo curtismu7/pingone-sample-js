@@ -195,6 +195,26 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
     }
 };
 
+const getUserIdByUsername = async (username, environmentId, token) => {
+    const url = `https://api.pingone.com/v1/environments/${environmentId}/users?filter=username eq "${username}"`;
+    try {
+        const response = await axios.get(url, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.data && response.data._embedded && response.data._embedded.users && response.data._embedded.users.length > 0) {
+            return response.data._embedded.users[0].id;
+        }
+        return null;
+    } catch (error) {
+        logManager.error('Failed to get user ID by username', {
+            username,
+            error: error.message,
+            statusCode: error.response?.status
+        });
+        throw new Error('Could not retrieve user from PingOne.');
+    }
+};
+
 // POST /api/token - Get worker token
 router.post('/', async (req, res) => {
     try {
@@ -501,5 +521,6 @@ router.get('/cache', (req, res) => {
 
 module.exports = {
     router,
-    getWorkerToken
+    getWorkerToken,
+    getUserIdByUsername
 }; 

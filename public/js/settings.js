@@ -22,6 +22,7 @@ class SettingsPage {
         await this.waitForTippy();
         console.log('Tippy.js is available');
         this.setupEventListeners();
+        this.setupModifyFields();
         this.loadSettings();
         this.startTokenStatusCheck();
         this.initializeTooltips();
@@ -91,6 +92,8 @@ class SettingsPage {
         document.getElementById('export-log-btn')?.addEventListener('click', () => this.exportLog());
         document.getElementById('clear-log-btn')?.addEventListener('click', () => this.clearLog());
         document.getElementById('log-file-name')?.addEventListener('change', (e) => this.updateLogConfig(e));
+        document.getElementById('select-all-modify-fields')?.addEventListener('click', (e) => this.toggleAllModifyFields(e.target.checked));
+        document.getElementById('advanced-header')?.addEventListener('click', () => this.toggleAdvancedSection());
     }
 
     setupSidebarNavigation() {
@@ -254,27 +257,65 @@ class SettingsPage {
         if (settings.defaultFileName) {
             this.updateDefaultFileDisplay(settings.defaultFileName);
         }
+
+        // Modify fields
+        if (settings.modifyFields && Array.isArray(settings.modifyFields)) {
+            const allFields = document.querySelectorAll('input[name="modifyFields"]');
+            allFields.forEach(checkbox => {
+                checkbox.checked = settings.modifyFields.includes(checkbox.value);
+            });
+        }
     }
 
     async saveAllSettings() {
         const saveBtn = document.getElementById('save-all-settings');
         try {
-            const settings = {
-                environmentId: document.getElementById('environment-id').value,
-                clientId: document.getElementById('client-id').value,
-                baseUrl: document.getElementById('base-url').value,
-                saveCredentials: document.getElementById('save-credentials').checked,
-                useClientSecret: document.getElementById('use-client-secret').checked,
+            const environmentId = document.getElementById('environment-id').value.trim();
+            const clientId = document.getElementById('client-id').value.trim();
+            const baseUrl = document.getElementById('base-url').value.trim();
+            const saveCredentials = document.getElementById('save-credentials').checked;
+            const useClientSecret = document.getElementById('use-client-secret').checked;
+            const clientSecret = document.getElementById('client-secret').value.trim();
+            const defaultFileName = document.getElementById('current-default-file')?.textContent || null;
 
-                defaultFileName: document.getElementById('current-default-file')?.textContent || null
+            // Robust validation
+            let errorMsg = '';
+            if (!environmentId) errorMsg += '<li>Environment ID is required.</li>';
+            if (!clientId) errorMsg += '<li>Client ID is required.</li>';
+            if (!baseUrl) errorMsg += '<li>Base URL is required.</li>';
+            if (useClientSecret && !clientSecret) errorMsg += '<li>Client Secret is required when "Use Client Secret" is checked.</li>';
+            if (errorMsg) {
+                utils.showModal(
+                    'Invalid Credentials',
+                    `<ul style='color:#b71c1c; font-weight:500;'>${errorMsg}</ul>`,
+                    { showCancel: false, confirmText: 'OK' }
+                );
+                saveBtn.textContent = 'Save Failed';
+                saveBtn.classList.add('error');
+                setTimeout(() => {
+                    saveBtn.textContent = 'Save Configuration';
+                    saveBtn.classList.remove('error');
+                }, 2000);
+                return;
+            }
+
+            const settings = {
+                environmentId,
+                clientId,
+                baseUrl,
+                saveCredentials,
+                useClientSecret,
+                defaultFileName
             };
 
-            if (settings.saveCredentials) {
-                settings.clientSecret = document.getElementById('client-secret').value;
+            const modifyFields = Array.from(document.querySelectorAll('input[name="modifyFields"]:checked')).map(cb => cb.value);
+            settings.modifyFields = modifyFields;
+
+            if (useClientSecret) {
+                settings.clientSecret = clientSecret;
             } else {
                 delete settings.clientSecret;
             }
-            
             localStorage.setItem('pingone-settings', JSON.stringify(settings));
             utils.log('All settings saved', 'info', settings);
 
@@ -289,8 +330,10 @@ class SettingsPage {
         } catch (error) {
             utils.handleError(error, 'saveAllSettings');
             saveBtn.textContent = 'Save Failed';
+            saveBtn.classList.add('error');
             setTimeout(() => {
                 saveBtn.textContent = 'Save Configuration';
+                saveBtn.classList.remove('error');
             }, 2000);
         }
     }
@@ -298,7 +341,7 @@ class SettingsPage {
     async testCredentials() {
         const tokenStatusEl = document.getElementById('token-status');
         try {
-            utils.showSpinner('Testing credentials...');
+            // utils.showSpinner('Testing credentials...');
             this.updateTokenStatus('loading', 'Testing...');
 
             const currentCreds = {
@@ -349,7 +392,7 @@ class SettingsPage {
                 clientId: document.getElementById('client-id').value?.substring(0, 8) + '...'
             });
         } finally {
-            utils.hideSpinner();
+            // utils.hideSpinner();
         }
     }
 
@@ -489,10 +532,75 @@ class SettingsPage {
     }
 
     updateLoggingStatus(isLogging, status = null) {
-        const statusEl = document.getElementById('logging-status-value');
-        if (statusEl) {
-            statusEl.textContent = status || (isLogging ? 'Active' : 'Inactive');
-            statusEl.className = `status-value ${isLogging ? 'active' : 'inactive'}`;
+        const statusContainer = document.getElementById('logging-status');
+        const statusValue = statusContainer?.querySelector('.status-value');
+        const statusIcon = statusContainer?.querySelector('.status-icon');
+
+        if (!statusContainer || !statusValue || !statusIcon) return;
+
+        let currentStatus = status;
+        if (!currentStatus) {
+            currentStatus = isLogging ? 'active' : 'inactive';
+        }
+
+        const statusMap = {
+            active: { text: 'Active', icon: '✓', colorClass: 'active' },
+            inactive: { text: 'Inactive', icon: '✗', colorClass: 'inactive' },
+            empty: { text: 'Empty', icon: '✓', colorClass: 'empty' }
+        };
+
+        const { text, icon, colorClass } = statusMap[currentStatus] || statusMap.inactive;
+        
+        statusValue.textContent = text;
+        statusIcon.textContent = icon;
+        
+        statusContainer.className = 'status-display'; // Reset classes
+        statusContainer.classList.add(colorClass);
+    }
+
+    setupModifyFields() {
+        const fields = [
+            { id: 'firstName', label: 'First Name', checked: true },
+            { id: 'lastName', label: 'Last Name', checked: true },
+            { id: 'email', label: 'Email', checked: true },
+            { id: 'username', label: 'Username', checked: false },
+            { id: 'password', label: 'Password', checked: false },
+            { id: 'population', label: 'Population', checked: false },
+            { id: 'active', label: 'Active', checked: true },
+            { id: 'title', label: 'Title', checked: false },
+            { id: 'phoneNumbers', label: 'Phone Numbers', checked: false },
+            { id: 'address', label: 'Address', checked: false },
+            { id: 'locale', label: 'Locale', checked: false },
+            { id: 'timezone', label: 'Timezone', checked: false },
+            { id: 'externalId', label: 'External ID', checked: false },
+            { id: 'type', label: 'Type', checked: false },
+            { id: 'nickname', label: 'Nickname', checked: false },
+        ];
+
+        const grid = document.getElementById('modify-fields-grid');
+        if (!grid) return;
+
+        grid.innerHTML = fields.map(field => `
+            <label class="checkbox-label">
+                <input type="checkbox" id="modify-${field.id}" name="modifyFields" value="${field.id}" ${field.checked ? 'checked' : ''}>
+                <span>${field.label}</span>
+                <span class="tooltip-icon" data-tippy-content="Update the ${field.label} attribute.">i</span>
+            </label>
+        `).join('');
+        this.initializeTooltips(); // Re-initialize tooltips for new elements
+    }
+
+    toggleAllModifyFields(checked) {
+        const checkboxes = document.querySelectorAll('#modify-fields-grid input[name="modifyFields"]');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = checked;
+        });
+    }
+
+    toggleAdvancedSection() {
+        const advancedSection = document.querySelector('.advanced-section');
+        if (advancedSection) {
+            advancedSection.classList.toggle('open');
         }
     }
 }
