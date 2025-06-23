@@ -585,8 +585,8 @@ class MainPage {
             // Show error in spinner but don't show modal
             utils.failOperationSpinner('step-processing', error.message);
             
-            // Don't show error modal - let the spinner handle completion
-            // The user can close the spinner and see results
+            // Always complete spinner with 0/0 to show summary
+            utils.completeOperationSpinner(0, 0);
             
             this.updateOperationStatus('Import', 'failed', null, error);
         } finally {
