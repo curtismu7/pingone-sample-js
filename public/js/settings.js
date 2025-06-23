@@ -247,8 +247,8 @@ class SettingsPage {
         if (clientIdEl) clientIdEl.value = settings.clientId || '';
         if (clientSecretEl) clientSecretEl.value = settings.clientSecret || '';
         if (baseUrlEl) baseUrlEl.value = settings.baseUrl || 'https://api.pingone.com';
-        if (saveCredentialsEl) saveCredentialsEl.checked = settings.saveCredentials === true;
-        if (useClientSecretEl) useClientSecretEl.checked = settings.useClientSecret !== false; // Default to true
+        if (saveCredentialsEl) saveCredentialsEl.checked = settings.saveCredentials || false;
+        if (useClientSecretEl) useClientSecretEl.checked = settings.useClientSecret || false;
 
         // App settings
         if (settings.defaultFileName) {
@@ -497,5 +497,7 @@ class SettingsPage {
     }
 }
 
-// Initialize the settings page logic
-new SettingsPage(); 
+// Only initialize if on settings page
+if (document.getElementById('environment-id')) {
+    window.settingsPage = new SettingsPage();
+} 

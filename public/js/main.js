@@ -496,60 +496,102 @@ class MainPage {
     }
 
     async importUsers() {
-        // Main import users function
-        // DEBUG: If import fails, check file selection, credentials, and server logs
+        // Import users from CSV file with real-time progress
+        // DEBUG: Check browser console and server logs for detailed operation status
         if (this.importInProgress) {
-            utils.showModal('Warning', 'Import operation already in progress.');
+            utils.log('Import already in progress', 'warning');
             return;
         }
 
         if (!this.currentFile) {
-            utils.showModal('Warning', 'Please select a CSV file first.');
-            return;
-        }
-
-        // Validate credentials before starting
-        const settings = utils.getSettings();
-        if (!settings || !settings.environmentId || !settings.clientId || !settings.clientSecret) {
-            utils.showModal('Error', 'Please configure your PingOne credentials in Settings first.');
-            return;
-        }
-
-        try {
-            this.importInProgress = true;
-            this.updateOperationStatus('import', 'in-progress');
-            
-            // Show operation spinner with file info
-            utils.showOperationSpinner('Importing Users...', this.currentFile.name, 'User Import', this.currentFileInfo.records);
-            utils.log(`Import Users started – action: Import Users (${this.currentFileInfo.records} records) from ${this.currentFileInfo.name}`, 'info');
-
-            // Read and parse file
-            const text = await this.readFileAsText(this.currentFile);
-            const parsedData = Papa.parse(text, { header: true, skipEmptyLines: true });
-            
-            // Process the import with real-time progress
-            const results = await this.processImport(parsedData.data, {
-                environmentId: settings.environmentId,
-                clientId: settings.clientId,
-                clientSecret: settings.clientSecret
+            utils.showModal('No File Selected', 'Please select a CSV file to import.', {
+                showCancel: false,
+                confirmText: 'OK'
             });
+            return;
+        }
 
-            // Complete the operation
-            utils.completeOperationSpinner(results.successCount, results.errorCount);
-            
-            this.updateOperationStatus('import', 'completed', results);
-            this.displayResults('Import Results', results.results);
-            
-            utils.log(`Imported ${results.successCount} users (${results.errorCount} failed) in ${results.duration}ms.`, 'info');
-            utils.log(`Action complete – Import Users: ${results.successCount}, Failed: ${results.errorCount} ✅`, 'info');
+        this.importInProgress = true;
+        
+        try {
+            // Get credentials from settings
+            const credentials = utils.getSettings();
+            if (!credentials || !credentials.environmentId || !credentials.clientId || !credentials.clientSecret) {
+                throw new Error('Missing PingOne credentials. Please configure in Settings.');
+            }
 
+            // Parse CSV file
+            utils.log('Parsing CSV file for import', 'info', { fileName: this.currentFile.name });
+            const records = await utils.parseCSV(this.currentFile);
+            
+            if (!records || records.length === 0) {
+                throw new Error('No valid records found in CSV file');
+            }
+
+            // Show operation spinner with initial status
+            utils.showOperationSpinner(
+                'Bulk User Import',
+                this.currentFile.name,
+                'Import',
+                records.length
+            );
+            
+            // Start workflow steps
+            utils.startWorkflowSteps();
+            utils.addFileLoadingStep(this.currentFile.name, records.length);
+            utils.addProcessingStep();
+            
+            // Update status to show we're starting the API call
+            utils.updateSpinnerSubtitle('Starting bulk import operation...');
+
+            // Process import with real-time progress
+            utils.log('Starting bulk import operation', 'info', { 
+                recordCount: records.length,
+                environmentId: credentials.environmentId.substring(0, 8) + '...'
+            });
+            
+            const result = await this.processImport(records, credentials);
+            
+            // Update status to show completion
+            utils.updateSpinnerSubtitle('Import operation completed');
+            
+            // Display results
+            if (result.success) {
+                const successCount = result.results?.filter(r => r.status === 'created').length || 0;
+                const errorCount = result.results?.filter(r => r.status === 'error').length || 0;
+                
+                utils.log('Import operation completed successfully', 'info', {
+                    totalRecords: records.length,
+                    successCount,
+                    errorCount,
+                    duration: result.duration
+                });
+                
+                this.updateOperationStatus('Import', 'completed', result.results);
+                this.displayResults(`Import Results (${successCount} successful, ${errorCount} failed)`, result.results);
+                
+                // Complete spinner with success
+                utils.completeOperationSpinner(successCount, errorCount);
+            } else {
+                throw new Error(result.error || 'Import operation failed');
+            }
+            
         } catch (error) {
-            console.error('Import operation failed:', error);
-            utils.log(`Import operation failed: ${error.message}`, 'error');
-            this.updateOperationStatus('import', 'failed', null, error.message);
+            utils.log('Import operation failed', 'error', { error: error.message });
+            
+            // Update status to show error
+            utils.updateSpinnerSubtitle(`Import failed: ${error.message}`);
+            
+            // Show error in spinner but don't show modal
             utils.failOperationSpinner('step-processing', error.message);
+            
+            // Don't show error modal - let the spinner handle completion
+            // The user can close the spinner and see results
+            
+            this.updateOperationStatus('Import', 'failed', null, error);
         } finally {
             this.importInProgress = false;
+            utils.disconnectProgress();
         }
     }
 
@@ -622,7 +664,13 @@ class MainPage {
             console.error('Modify operation failed:', error);
             utils.log(`Modify operation failed: ${error.message}`, 'error');
             this.updateOperationStatus('modify', 'failed', null, error.message);
+            
+            // Show error in spinner but don't show modal
             utils.failOperationSpinner('step-processing', error.message);
+            
+            // Don't show error modal - let the spinner handle completion
+            // The user can close the spinner and see results
+            
         } finally {
             this.modifyInProgress = false;
         }
@@ -696,7 +744,13 @@ class MainPage {
             console.error('Delete operation failed:', error);
             utils.log(`Delete operation failed: ${error.message}`, 'error');
             this.updateOperationStatus('delete', 'failed', null, error.message);
+            
+            // Show error in spinner but don't show modal
             utils.failOperationSpinner('step-processing', error.message);
+            
+            // Don't show error modal - let the spinner handle completion
+            // The user can close the spinner and see results
+            
         } finally {
             this.deleteInProgress = false;
         }
@@ -745,7 +799,7 @@ class MainPage {
 
             if (result.success) {
                 utils.completeOperationSpinner(1, 0); // 1 success, 0 failed
-                utils.showModal('Success', `User "${username}" deleted successfully.`);
+                // Don't show success modal - let the spinner handle completion
                 usernameInput.value = ''; // Clear the input
                 utils.log(`Successfully deleted user: ${username}`, 'info');
             } else {
@@ -756,29 +810,30 @@ class MainPage {
             console.error('Single delete processing error:', error);
             utils.log(`Failed to delete user: ${username} - ${error.message}`, 'error');
             utils.failOperationSpinner('step-processing', error.message);
-            utils.showModal('Error', `Failed to delete user "${username}": ${error.message}`);
+            // Don't show error modal - let the spinner handle completion
         }
     }
 
-    // Helper function to read file as text
-    // DEBUG: If file reading fails, check file encoding and browser compatibility
     readFileAsText(file) {
+        // Read file as text for parsing
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(new Error('Failed to read file'));
+            reader.onerror = (e) => reject(e);
             reader.readAsText(file);
         });
     }
 
+    // Legacy functions - now handled by utils.showOperationSpinner() and utils.hideSpinner()
+    // These functions are kept for backward compatibility but are no longer used
     showImportProgress() {
-        // Show import progress indicators
         // Legacy function - progress now handled by utils.showOperationSpinner()
+        utils.log('showImportProgress called (legacy)', 'debug');
     }
 
     hideImportProgress() {
-        // Hide import progress indicators  
         // Legacy function - progress now handled by utils.hideSpinner()
+        utils.log('hideImportProgress called (legacy)', 'debug');
     }
 
     async processImport(records, credentials) {
@@ -787,6 +842,9 @@ class MainPage {
         const startTime = Date.now();
         
         try {
+            // Update status to show we're making the API call
+            utils.updateSpinnerSubtitle('Sending import request to server...');
+            
             const response = await fetch('/api/import/bulk', {
                 method: 'POST',
                 headers: {
@@ -807,6 +865,9 @@ class MainPage {
             }
 
             const result = await response.json();
+            
+            // Update status to show we're connecting to progress updates
+            utils.updateSpinnerSubtitle('Connecting to progress updates...');
             
             // Connect to SSE for real-time progress updates
             if (result.operationId) {
@@ -831,7 +892,7 @@ class MainPage {
         const startTime = Date.now();
         
         try {
-            const response = await fetch('/api/modify', {
+            const response = await fetch('/api/modify/bulk', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
