@@ -583,22 +583,22 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     border: 1.5px solid #e5e7eb;
     max-width: 420px;
     width: 95vw;
-    overflow-y: auto; /* Allow scrolling for tall content */
-    max-height: 90vh; /* Limit height to 90% of the viewport */
+    max-height: 85vh; /* Reduced from 90vh for better laptop fit */
     display: flex;
     flex-direction: column;
+    overflow-y: auto; /* Always auto for scrollability */
 }
 
 .spinner-content {
-    padding: 1.2rem 1.2rem 1.2rem 1.2rem; /* Add padding to bottom */
+    padding: 1rem; /* Reduced from 1.2rem */
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    overflow-y: auto; /* Ensure content area scrolls if needed */
+    overflow-y: auto;
 }
 
-.spinner-header, .spinner-details, .spinner-progress-section, .spinner-steps, .spinner-status-summary {
-    margin-bottom: 1.5rem;
+.spinner-header, .spinner-details, .spinner-progress-section, .spinner-steps {
+    margin-bottom: 1rem; /* Reduced from 1.5rem */
 }
 
 .spinner-header {
@@ -608,20 +608,20 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     gap: 1rem;
 }
 
-.spinner-details, .spinner-progress-section, .spinner-steps, .spinner-status-summary {
-    padding: 1rem;
+.spinner-details, .spinner-progress-section, .spinner-steps {
+    padding: 0.75rem; /* Reduced from 1rem */
     background-color: var(--ping-gray-light);
     border-radius: 6px;
     border: 1px solid var(--border);
 }
 
 .spinner-title-section h3 {
-    font-size: 1.15rem;
+    font-size: 1.1rem; /* Reduced from 1.15rem */
     margin-bottom: 0.2rem;
 }
 
 .spinner-subtitle {
-    font-size: 0.95rem;
+    font-size: 0.9rem; /* Reduced from 0.95rem */
     margin-bottom: 0.1rem;
 }
 
@@ -629,7 +629,7 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     display: flex;
     justify-content: flex-end;
     gap: 0.7rem;
-    padding: 0.7rem 0.2rem 0.2rem 0.2rem;
+    padding: 0.5rem 0.2rem 0.2rem 0.2rem; /* Reduced top padding */
     border-top: 1px solid #e5e7eb;
     background: #fafbfc;
     position: sticky;
@@ -645,9 +645,9 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     background: #f3f4f6;
     color: #b91c1c;
     border: 1px solid #e5e7eb;
-    padding: 0.5rem 1.2rem;
+    padding: 0.4rem 1rem; /* Reduced from 0.5rem 1.2rem */
     border-radius: 6px;
-    font-size: 0.95rem;
+    font-size: 0.9rem; /* Reduced from 0.95rem */
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
@@ -663,9 +663,9 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     background: #f3f4f6;
     color: #374151;
     border: 1px solid #e5e7eb;
-    padding: 0.5rem 1.2rem;
+    padding: 0.4rem 1rem; /* Reduced from 0.5rem 1.2rem */
     border-radius: 6px;
-    font-size: 0.95rem;
+    font-size: 0.9rem; /* Reduced from 0.95rem */
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
@@ -701,10 +701,10 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 }
 
 .spinner-icon {
-    width: 48px;
-    height: 48px;
-    border: 4px solid rgba(0, 0, 0, 0.1);
-    border-top: 4px solid #dc2626;
+    width: 40px; /* Reduced from 48px */
+    height: 40px; /* Reduced from 48px */
+    border: 3px solid rgba(0, 0, 0, 0.1); /* Reduced from 4px */
+    border-top: 3px solid #dc2626; /* Reduced from 4px */
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -716,25 +716,25 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 .spinner-header-main {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    gap: 1rem; /* Reduced from 1.5rem */
     flex: 1;
 }
 
 .progress-bar {
     width: 100%;
-    height: 12px;
-    min-height: 12px;
+    height: 10px; /* Reduced from 12px */
+    min-height: 10px; /* Reduced from 12px */
     background: #f3f4f6;
-    border-radius: 6px;
+    border-radius: 5px; /* Reduced from 6px */
     overflow: hidden;
-    border: 1.5px solid #e5e7eb;
+    border: 1px solid #e5e7eb; /* Reduced from 1.5px */
     position: relative;
 }
 
 .progress-fill {
-    min-height: 12px;
+    min-height: 10px; /* Reduced from 12px */
     background: linear-gradient(90deg, #dc2626 0%, #b91c1c 100%);
-    border-radius: 6px;
+    border-radius: 5px; /* Reduced from 6px */
     width: 0%;
     transition: width 0.3s ease;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -749,31 +749,73 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem; /* Reduced from 1rem */
 }
 
 .progress-label {
-    font-size: 1rem;
+    font-size: 0.95rem; /* Reduced from 1rem */
     font-weight: 600;
     color: #374151;
 }
 
 .progress-percentage {
-    font-size: 1.1rem;
+    font-size: 1rem; /* Reduced from 1.1rem */
     font-weight: 700;
     color: #dc2626;
     font-family: 'Courier New', monospace;
 }
 
+/* Combined Progress Stats */
+.progress-stats {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 0.75rem; /* Reduced from 1rem */
+    padding-top: 0.75rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.progress-stats .stats-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.progress-stats .stats-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #6b7280;
+}
+
+.progress-stats .stats-value {
+    font-size: 1rem; /* Reduced from 1.1rem */
+    font-weight: 600;
+    padding: 0.2rem 0.4rem; /* Reduced from 0.25rem 0.5rem */
+    border-radius: 4px;
+    background-color: #fff;
+    border: 1px solid #e5e7eb;
+}
+
+.progress-stats .stats-value.success {
+    color: #059669;
+    border-color: #059669;
+    background-color: rgba(5, 150, 105, 0.1);
+}
+
+.progress-stats .stats-value.error {
+    color: #dc2626;
+    border-color: #dc2626;
+    background-color: rgba(220, 38, 38, 0.1);
+}
+
 .spinner-step {
     display: flex;
     align-items: center;
-    margin: 1rem 0;
-    padding: 1rem;
+    margin: 0.75rem 0; /* Reduced from 1rem */
+    padding: 0.75rem; /* Reduced from 1rem */
     background-color: #f9fafb;
     border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    font-size: 0.95rem;
+    border-radius: 6px; /* Reduced from 8px */
+    font-size: 0.9rem; /* Reduced from 0.95rem */
     color: #374151;
     transition: all 0.3s ease;
 }
@@ -800,39 +842,39 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     display: flex;
     align-items: center;
     width: 100%;
-    gap: 1rem;
+    gap: 0.75rem; /* Reduced from 1rem */
 }
 
 .step-icon {
-    font-size: 1.2rem;
-    min-width: 24px;
+    font-size: 1.1rem; /* Reduced from 1.2rem */
+    min-width: 20px; /* Reduced from 24px */
     text-align: center;
 }
 
 .step-text {
     flex: 1;
     font-weight: 500;
-    line-height: 1.4;
+    line-height: 1.3; /* Reduced from 1.4 */
 }
 
 .step-status {
-    font-size: 1.1rem;
+    font-size: 1rem; /* Reduced from 1.1rem */
     font-weight: bold;
-    min-width: 24px;
+    min-width: 20px; /* Reduced from 24px */
     text-align: center;
 }
 
 .operation-info {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.4rem; /* Reduced from 0.5rem */
 }
 
 .info-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 0;
+    padding: 0.4rem 0; /* Reduced from 0.5rem */
     border-bottom: 1px solid #f0f0f0;
 }
 
@@ -841,14 +883,14 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 }
 
 .info-label {
-    font-size: 0.9rem;
+    font-size: 0.85rem; /* Reduced from 0.9rem */
     font-weight: 600;
     color: #374151;
-    min-width: 100px;
+    min-width: 80px; /* Reduced from 100px */
 }
 
 .info-value {
-    font-size: 0.9rem;
+    font-size: 0.85rem; /* Reduced from 0.9rem */
     font-weight: 500;
     color: #dc2626;
     text-align: right;
@@ -1848,4 +1890,110 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     .spinner-container {
         max-width: 600px;
     }
+}
+
+.file-info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    background: #fafbfc;
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 0.97rem;
+}
+.file-info-table th, .file-info-table td {
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+}
+.file-info-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+    color: #374151;
+    width: 160px;
+}
+.file-info-table tr:last-child th, .file-info-table tr:last-child td {
+    border-bottom: none;
+}
+.file-info-table td {
+    color: #b91c1c;
+    font-family: 'Courier New', monospace;
+}
+
+#current-file-status {
+    margin-bottom: 1.5rem;
+}
+
+.file-info-heading {
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: #b91c1c;
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.5px;
+}
+
+.file-info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    background: #fafbfc;
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 0.97rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    border: 1px solid #e5e7eb;
+}
+.file-info-table th, .file-info-table td {
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+}
+.file-info-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+    color: #374151;
+    width: 160px;
+}
+.file-info-table tr:last-child th, .file-info-table tr:last-child td {
+    border-bottom: none;
+}
+.file-info-table td {
+    color: #b91c1c;
+    font-family: 'Courier New', monospace;
+}
+
+.file-info-error {
+    color: #b91c1c;
+    font-weight: 600;
+    padding: 1rem;
+    background: #fff0f0;
+    border-radius: 6px;
+    text-align: center;
+}
+
+/* Collapsible File Info Section */
+.collapsible-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ping-blue-primary);
+    background: #f3f4f6;
+    border-radius: 6px 6px 0 0;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+    margin-bottom: 0;
+}
+.collapsible-header:hover {
+    background: #e5e7eb;
+}
+#file-info-caret {
+    transition: transform 0.2s;
+    font-size: 1.2em;
+}
+.file-details {
+    padding: 0.5rem 0 0.5rem 0;
 } 

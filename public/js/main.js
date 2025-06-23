@@ -2,6 +2,10 @@
 // This file handles all user operations: import, modify, delete
 // Debugging: Check browser console for detailed operation logs
 
+if (window.utils && typeof window.utils.setupSpinner === 'function') {
+    window.utils.setupSpinner();
+}
+
 class MainPage {
     constructor() {
         // State management for file operations
@@ -318,6 +322,10 @@ class MainPage {
     }
 
     async handleFileSelect(event) {
+        // Fallback: ensure spinner is present before any spinner usage
+        if (!document.getElementById('spinner-overlay') && window.utils && typeof window.utils.setupSpinner === 'function') {
+            window.utils.setupSpinner();
+        }
         // Handle CSV file selection and validation
         // DEBUG: If file processing fails, check file format and size
         const file = event.target.files[0];
@@ -342,8 +350,6 @@ class MainPage {
         }
 
         try {
-            utils.showSpinner('Analyzing CSV file...');
-            
             // Read and parse CSV file
             const text = await this.readFileAsText(file);
             const parsedData = Papa.parse(text, { header: true, skipEmptyLines: true });
@@ -367,38 +373,59 @@ class MainPage {
 
             // Display file status
             this.displayCurrentFileStatus(this.currentFileInfo, 'selected-file-info');
-            this.displayFileMetadata(parsedData.meta);
-            
-            utils.log(`Selected file: ${file.name} (${parsedData.data.length} records)`, 'info');
         } catch (error) {
             console.error('Error processing file:', error);
             utils.showModal('Error', `Failed to process file: ${error.message}`);
             this.clearFileSelection();
-        } finally {
-            utils.hideSpinner();
         }
     }
 
     displayCurrentFileStatus(fileInfo, sourceClass) {
-        // Display current file information in the UI
-        // DEBUG: If file info doesn't display, check if element exists and CSS classes
+        // Display current file information in the UI as a table, collapsible
         const statusElement = document.getElementById('current-file-status');
-        if (statusElement && fileInfo) {
-            statusElement.innerHTML = `
-                <div class="current-file-info ${sourceClass}">
-                    <div class="file-info-header">
-                        <strong>Current:</strong> 
-                        <span class="filename">${fileInfo.name}</span>
+        const detailsElement = document.getElementById('current-file-details');
+        const header = document.getElementById('file-info-collapsible-header');
+        const caret = document.getElementById('file-info-caret');
+        if (statusElement && detailsElement && header && caret) {
+            if (fileInfo) {
+                // Show section and header
+                statusElement.classList.remove('hidden');
+                statusElement.style.display = 'block';
+                header.style.display = 'flex';
+                // Default: expanded
+                detailsElement.style.display = 'block';
+                caret.style.transform = 'rotate(90deg)';
+                // Inject table
+                const columns = (fileInfo.headers && fileInfo.headers.length) ? fileInfo.headers.join(', ') : '-';
+                detailsElement.innerHTML = `
+                    <div class=\"current-file-info show ${sourceClass}\">
+                        <table class=\"file-info-table\">
+                            <tr><th>File Name</th><td>${fileInfo.name}</td></tr>
+                            <tr><th>File Size</th><td>${this.formatFileSize(fileInfo.size)}</td></tr>
+                            <tr><th>Number of Entries</th><td>${fileInfo.records}</td></tr>
+                            <tr><th>Columns</th><td>${columns}</td></tr>
+                            <tr><th>Last Modified</th><td>${fileInfo.lastModified || '-'}</td></tr>
+                            <tr><th>Created</th><td>${fileInfo.created || '-'}</td></tr>
+                        </table>
                     </div>
-                    <div class="file-details">
-                        <span class="file-size">${this.formatFileSize(fileInfo.size)}</span>
-                        <span class="record-count">${fileInfo.records} records</span>
-                        <span class="file-date">Modified: ${fileInfo.lastModified}</span>
-                    </div>
-                </div>
-            `;
-            statusElement.style.display = 'block';
-            statusElement.classList.remove('hidden');
+                `;
+                // Collapsible logic
+                header.onclick = () => {
+                    if (detailsElement.style.display === 'none') {
+                        detailsElement.style.display = 'block';
+                        caret.style.transform = 'rotate(90deg)';
+                    } else {
+                        detailsElement.style.display = 'none';
+                        caret.style.transform = 'rotate(0deg)';
+                    }
+                };
+            } else {
+                // Hide section and header, clear details
+                statusElement.classList.add('hidden');
+                statusElement.style.display = 'none';
+                header.style.display = 'none';
+                detailsElement.innerHTML = '';
+            }
         }
     }
 
@@ -411,51 +438,24 @@ class MainPage {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    displayFileMetadata(metadata) {
-        // Display CSV metadata (headers, field count, etc.)
-        // DEBUG: If metadata doesn't show, check Papa Parse output structure
-        const metadataElement = document.getElementById('file-metadata');
-        if (metadataElement && metadata.fields) {
-            metadataElement.innerHTML = `
-                <div class="metadata-section">
-                    <h4>File Structure</h4>
-                    <p><strong>Fields:</strong> ${metadata.fields.length}</p>
-                    <p><strong>Headers:</strong> ${metadata.fields.join(', ')}</p>
-                </div>
-            `;
-            metadataElement.style.display = 'block';
-            metadataElement.classList.remove('hidden');
-        }
-    }
-
     clearFileSelection() {
         // Reset file selection state
-        // DEBUG: Call this if you need to reset file state during testing
         this.currentFile = null;
         this.currentFileInfo = null;
         localStorage.removeItem('currentFileInfo');
-        
         // Clear UI elements
         const fileInput = document.getElementById('csv-file');
         if (fileInput) fileInput.value = '';
-        
         const statusElement = document.getElementById('current-file-status');
-        if (statusElement) {
-            statusElement.style.display = 'none';
+        const detailsElement = document.getElementById('current-file-details');
+        const header = document.getElementById('file-info-collapsible-header');
+        if (statusElement && detailsElement && header) {
             statusElement.classList.add('hidden');
+            statusElement.style.display = 'none';
+            header.style.display = 'none';
+            detailsElement.innerHTML = '';
         }
-        
-        this.clearFileMetadata();
         utils.log('File selection cleared', 'info');
-    }
-
-    clearFileMetadata() {
-        // Clear file metadata display
-        const metadataElement = document.getElementById('file-metadata');
-        if (metadataElement) {
-            metadataElement.style.display = 'none';
-            metadataElement.classList.add('hidden');
-        }
     }
 
     updateOperationStatus(operation, status, results = null, error = null) {
@@ -1232,6 +1232,9 @@ ${JSON.stringify(result, null, 2)}
 
 // Initialize main page when DOM is loaded
 // DEBUG: If page doesn't initialize, check for JavaScript errors in console
-document.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', () => {
+    if (window.utils && typeof window.utils.setupSpinner === 'function') {
+        window.utils.setupSpinner();
+    }
     window.mainPage = new MainPage();
 }); 
