@@ -36,13 +36,15 @@ body {
     color: var(--text-primary);
     background-color: var(--background);
     overflow-x: hidden;
+    overflow-y: auto; /* Allow vertical scrolling */
+    min-height: 100vh;
 }
 
 /* App Container for Push Behavior */
 .app-container {
     display: flex;
     width: 100%;
-    min-height: calc(100vh - 80px); /* Subtract header height */
+    min-height: 100vh; /* Use full viewport height */
 }
 
 h1 { font-size: 1.75rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--ping-blue-deep); }
@@ -131,6 +133,7 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     position: sticky;
     top: 0;
     height: calc(100vh - 80px); /* Subtract header height */
+    max-height: calc(100vh - 80px); /* Ensure it doesn't exceed viewport */
 }
 
 .sidebar:hover,
@@ -287,8 +290,11 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 .main-content { 
     flex: 1; 
     padding: 2rem; 
-    overflow: auto;
+    overflow-y: auto; /* Allow vertical scrolling */
+    overflow-x: hidden; /* Prevent horizontal scrolling */
     min-width: 0; /* Prevent flex item from overflowing */
+    height: calc(100vh - 80px); /* Subtract header height */
+    max-height: calc(100vh - 80px); /* Ensure it doesn't exceed viewport */
 }
 
 /* Cards */

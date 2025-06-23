@@ -896,7 +896,7 @@ class Utils {
     }
 
     completeOperationSpinner(successCount, failedCount = 0) {
-        // Complete operation spinner with final results
+        // Complete the operation spinner with final results
         this.stopProgressSimulation();
         this.stopElapsedTimer();
         
@@ -926,7 +926,60 @@ class Utils {
         if (headerBtn) headerBtn.classList.add('hidden');
         if (footerBtn) footerBtn.classList.remove('hidden');
         
+        // Add event listener to close button to handle completion
+        const closeBtn = document.getElementById('spinner-close');
+        if (closeBtn) {
+            closeBtn.onclick = () => this.handleSpinnerCompletion();
+        }
+        
         this.log('Operation spinner completed', 'debug', { successCount, failedCount });
+    }
+
+    handleSpinnerCompletion() {
+        // Handle what happens when spinner is closed after completion
+        this.hideSpinner();
+        
+        // Remove any error popups or modals
+        this.hideModal();
+        
+        // Clear any error messages
+        this.clearErrorMessages();
+        
+        // Return to main page (scroll to top)
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        
+        // Show results panel if we have results data
+        this.showResultsPanel();
+        
+        this.log('Spinner completion handled', 'debug');
+    }
+
+    clearErrorMessages() {
+        // Clear any error messages or popups
+        const errorElements = document.querySelectorAll('.error-details, .error-message, .alert-error');
+        errorElements.forEach(element => {
+            element.classList.add('hidden');
+            element.innerHTML = '';
+        });
+        
+        // Clear any console errors display
+        const consoleErrors = document.querySelectorAll('.console-error, .debug-error');
+        consoleErrors.forEach(element => {
+            element.remove();
+        });
+    }
+
+    showResultsPanel() {
+        // Show the results panel at the bottom of the page
+        const resultsPanel = document.getElementById('results-panel');
+        if (resultsPanel) {
+            resultsPanel.classList.remove('hidden');
+            
+            // Scroll to results panel
+            setTimeout(() => {
+                resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 500);
+        }
     }
 
     failOperationSpinner(stepId, error) {
@@ -955,6 +1008,12 @@ class Utils {
         const footerBtn = document.getElementById('spinner-footer-btn-container');
         if (headerBtn) headerBtn.classList.add('hidden');
         if (footerBtn) footerBtn.classList.remove('hidden');
+        
+        // Add event listener to close button to handle completion
+        const closeBtn = document.getElementById('spinner-close');
+        if (closeBtn) {
+            closeBtn.onclick = () => this.handleSpinnerCompletion();
+        }
         
         this.log('Operation spinner failed', 'debug', { stepId, error });
     }
@@ -1185,11 +1244,16 @@ class Utils {
         switch (data.type) {
             case 'connected':
                 this.log('SSE connected', 'debug', { operationId: data.operationId });
+                this.updateSpinnerSubtitle('Connected to server, starting operation...');
                 break;
                 
             case 'progress':
-                this.updateSpinnerProgress(data.current, data.total, data.message);
-                this.updateSpinnerSubtitle(data.message);
+                // Throttle progress updates to prevent too frequent updates
+                if (!this.lastProgressUpdate || Date.now() - this.lastProgressUpdate > 500) {
+                    this.updateSpinnerProgress(data.current, data.total, data.message);
+                    this.updateSpinnerSubtitle(data.message || `Processing ${data.current}/${data.total} records...`);
+                    this.lastProgressUpdate = Date.now();
+                }
                 
                 // Update success/error counts if available
                 if (data.success !== undefined && data.errors !== undefined) {
@@ -1199,7 +1263,7 @@ class Utils {
                 
             case 'complete':
                 this.updateSpinnerProgress(data.current, data.total, data.message);
-                this.updateSpinnerSubtitle(data.message);
+                this.updateSpinnerSubtitle(data.message || 'Operation completed successfully');
                 this.stopSpinnerAnimation();
                 
                 // Show completion summary
@@ -1209,7 +1273,13 @@ class Utils {
                 break;
                 
             case 'error':
+                this.updateSpinnerSubtitle(`Error: ${data.message}`);
                 this.failOperationSpinner('step-processing', data.message);
+                break;
+                
+            case 'status':
+                // Handle status updates specifically
+                this.updateSpinnerSubtitle(data.message || 'Processing...');
                 break;
         }
     }
