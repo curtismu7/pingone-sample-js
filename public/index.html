@@ -94,13 +94,11 @@
 
                     <!-- Current File Status -->
                     <div id="current-file-status" class="file-status-box hidden">
-                        <div class="status-header centered">
-                            <strong>Selected File:</strong> <span id="current-file-name"></span>
-                            <span id="file-source-label" class="file-source"></span>
+                        <div class="collapsible-header" id="file-info-collapsible-header" style="display:none; cursor:pointer; user-select:none; align-items:center; gap:0.5rem;">
+                            <span id="file-info-caret" style="font-size:1.2em; transition:transform 0.2s;">▶</span>
+                            <span><strong>File Information</strong></span>
                         </div>
-                        <div id="current-file-details" class="file-details">
-                            <!-- File details will be populated here -->
-                        </div>
+                        <div id="current-file-details" class="file-details"></div>
                     </div>
 
                     <!-- File Metadata -->
