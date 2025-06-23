@@ -251,6 +251,11 @@ class Utils {
         }
     }
 
+    getStoredCredentials() {
+        // Alias for getSettings for consistency with settings page
+        return this.getSettings();
+    }
+
     saveSettings(settings) {
         // Save application settings to localStorage
         // DEBUG: If settings don't save, check localStorage quota and permissions
@@ -1025,16 +1030,18 @@ class Utils {
         const failedElement = document.getElementById('summary-failed');
         const timeElement = document.getElementById('summary-time');
         
+        // Defensive: default to 0 if undefined or not a number
+        if (typeof successCount !== 'number' || isNaN(successCount)) successCount = 0;
+        if (typeof failedCount !== 'number' || isNaN(failedCount)) failedCount = 0;
+        
         if (statusSummary && successElement && failedElement && timeElement) {
             successElement.textContent = successCount.toLocaleString();
             failedElement.textContent = failedCount.toLocaleString();
-            
             // Calculate total time
             if (this.operationStartTime) {
                 const totalTime = Date.now() - this.operationStartTime;
                 timeElement.textContent = this.formatElapsedTime(totalTime);
             }
-            
             statusSummary.classList.remove('hidden');
         }
     }
@@ -1101,7 +1108,7 @@ class Utils {
                         recordCount: results.data.length,
                         errors: results.errors.length
                     });
-                    resolve(results);
+                    resolve(results.data);
                 },
                 error: (error) => {
                     this.log('CSV parsing failed', 'error', { error: error.message });

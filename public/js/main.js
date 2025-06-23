@@ -29,6 +29,16 @@ class MainPage {
         this.loadPersistedState();
         this.initializeTooltips();
         utils.log('Main page initialized', 'info');
+
+        // TEMP: Credential check on main page load
+        const credentials = utils.getSettings();
+        if (!credentials || !credentials.environmentId || !credentials.clientId || (credentials.useClientSecret && !credentials.clientSecret)) {
+            utils.showModal(
+                'Configuration Error',
+                'Your PingOne credentials are not configured. Please go to the Settings page to configure them.',
+                { showCancel: false, confirmText: 'Go to Settings', onConfirm: () => window.location.href = 'settings.html' }
+            );
+        }
     }
 
     async waitForUtils() {
@@ -388,6 +398,7 @@ class MainPage {
                 </div>
             `;
             statusElement.style.display = 'block';
+            statusElement.classList.remove('hidden');
         }
     }
 
@@ -413,6 +424,7 @@ class MainPage {
                 </div>
             `;
             metadataElement.style.display = 'block';
+            metadataElement.classList.remove('hidden');
         }
     }
 
@@ -428,7 +440,10 @@ class MainPage {
         if (fileInput) fileInput.value = '';
         
         const statusElement = document.getElementById('current-file-status');
-        if (statusElement) statusElement.style.display = 'none';
+        if (statusElement) {
+            statusElement.style.display = 'none';
+            statusElement.classList.add('hidden');
+        }
         
         this.clearFileMetadata();
         utils.log('File selection cleared', 'info');
@@ -439,6 +454,7 @@ class MainPage {
         const metadataElement = document.getElementById('file-metadata');
         if (metadataElement) {
             metadataElement.style.display = 'none';
+            metadataElement.classList.add('hidden');
         }
     }
 
@@ -504,10 +520,14 @@ class MainPage {
         }
 
         if (!this.currentFile) {
-            utils.showModal('No File Selected', 'Please select a CSV file to import.', {
-                showCancel: false,
-                confirmText: 'OK'
-            });
+            utils.showModal(
+                'Warning',
+                `<div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0;">
+                    <span style="font-size: 2rem; color: #c8102e;">⚠️</span>
+                    <span style="font-size: 1.1rem; color: #b71c1c; font-weight: 500;">Please select a CSV file first.</span>
+                </div>`,
+                { showCancel: false }
+            );
             return;
         }
 
@@ -516,13 +536,27 @@ class MainPage {
         try {
             // Get credentials from settings
             const credentials = utils.getSettings();
-            if (!credentials || !credentials.environmentId || !credentials.clientId || !credentials.clientSecret) {
-                throw new Error('Missing PingOne credentials. Please configure in Settings.');
+            
+            if (!credentials || !credentials.environmentId || !credentials.clientId || (credentials.useClientSecret && !credentials.clientSecret)) {
+                utils.showModal(
+                    'Configuration Error',
+                    'Your PingOne credentials are not configured. Please go to the Settings page to configure them.',
+                    { showCancel: false, confirmText: 'Go to Settings', onConfirm: () => window.location.href = 'settings.html' }
+                );
+                this.importInProgress = false;
+                return;
             }
+            
+            utils.log('Retrieved credentials for import', 'debug', { credentials });
 
             // Parse CSV file
             utils.log('Parsing CSV file for import', 'info', { fileName: this.currentFile.name });
             const records = await utils.parseCSV(this.currentFile);
+            
+            utils.log('CSV parsing result', 'debug', { 
+                recordCount: records?.length || 0,
+                firstRecord: records?.[0] || null
+            });
             
             if (!records || records.length === 0) {
                 throw new Error('No valid records found in CSV file');
@@ -604,13 +638,24 @@ class MainPage {
         }
 
         if (!this.currentFile) {
-            utils.showModal('Warning', 'Please select a CSV file first.');
+            utils.showModal(
+                'Warning',
+                `<div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0;">
+                    <span style="font-size: 2rem; color: #c8102e;">⚠️</span>
+                    <span style="font-size: 1.1rem; color: #b71c1c; font-weight: 500;">Please select a CSV file first.</span>
+                </div>`,
+                { showCancel: false }
+            );
             return;
         }
 
-        const settings = utils.getSettings();
-        if (!settings || !settings.environmentId || !settings.clientId || !settings.clientSecret) {
-            utils.showModal('Error', 'Please configure your PingOne credentials in Settings first.');
+        const credentials = utils.getSettings();
+        if (!credentials || !credentials.environmentId || !credentials.clientId || (credentials.useClientSecret && !credentials.clientSecret)) {
+            utils.showModal(
+                'Configuration Error',
+                'Your PingOne credentials are not configured. Please go to the Settings page to configure them.',
+                { showCancel: false, confirmText: 'Go to Settings', onConfirm: () => window.location.href = 'settings.html' }
+            );
             return;
         }
 
@@ -623,42 +668,26 @@ class MainPage {
 
             utils.startWorkflowSteps();
 
-            // Get worker token
-            utils.log('Getting worker token for modify operation', 'info');
-            const tokenResponse = await utils.getWorkerToken();
-            
-            if (!tokenResponse.success) {
-                throw new Error(`Failed to get worker token: ${tokenResponse.message}`);
-            }
-
-            utils.updateTokenStep(tokenResponse.data.access_token, tokenResponse.data.expires_in);
-
             // Read and parse file
-            const text = await this.readFileAsText(this.currentFile);
-            const parsedData = Papa.parse(text, { header: true, skipEmptyLines: true });
+            const records = await utils.parseCSV(this.currentFile);
             
-            utils.addFileLoadingStep(this.currentFileInfo.name, parsedData.data.length);
+            utils.addFileLoadingStep(this.currentFileInfo.name, records.length);
             utils.addProcessingStep();
 
             // Start progress simulation
-            utils.startProgressSimulation(parsedData.data.length, 6000, this.currentFileInfo.name);
+            utils.startProgressSimulation(records.length, 6000, this.currentFileInfo.name);
 
             // Process the modification
-            const results = await this.processModify(parsedData.data, {
-                environmentId: settings.environmentId,
-                clientId: settings.clientId,
-                clientSecret: settings.clientSecret,
-                accessToken: tokenResponse.data.access_token
-            });
+            const results = await this.processModify(records, credentials);
 
-            utils.addFinalizingStep(results.successCount, results.errorCount, 'Modify');
-            utils.completeOperationSpinner(results.successCount, results.errorCount);
+            utils.addFinalizingStep(results.summary.successful, results.summary.failed, 'Modify');
+            utils.completeOperationSpinner(results.summary.successful, results.summary.failed);
             
             this.updateOperationStatus('modify', 'completed', results);
             this.displayResults('Modify Results', results.results);
             
-            utils.log(`Modified ${results.successCount} users (${results.errorCount} failed) in ${results.duration}ms.`, 'info');
-            utils.log(`Action complete – Modify Users: ${results.successCount}, Failed: ${results.errorCount} ✅`, 'info');
+            utils.log(`Modified ${results.summary.successful} users (${results.summary.failed} failed) in ${results.duration}ms.`, 'info');
+            utils.log(`Action complete – Modify Users: ${results.summary.successful}, Failed: ${results.summary.failed} ✅`, 'info');
 
         } catch (error) {
             console.error('Modify operation failed:', error);
@@ -685,13 +714,24 @@ class MainPage {
         }
 
         if (!this.currentFile) {
-            utils.showModal('Warning', 'Please select a CSV file first.');
+            utils.showModal(
+                'Warning',
+                `<div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0;">
+                    <span style="font-size: 2rem; color: #c8102e;">⚠️</span>
+                    <span style="font-size: 1.1rem; color: #b71c1c; font-weight: 500;">Please select a CSV file first.</span>
+                </div>`,
+                { showCancel: false }
+            );
             return;
         }
 
-        const settings = utils.getSettings();
-        if (!settings || !settings.environmentId || !settings.clientId || !settings.clientSecret) {
-            utils.showModal('Error', 'Please configure your PingOne credentials in Settings first.');
+        const credentials = utils.getSettings();
+        if (!credentials || !credentials.environmentId || !credentials.clientId || (credentials.useClientSecret && !credentials.clientSecret)) {
+            utils.showModal(
+                'Configuration Error',
+                'Your PingOne credentials are not configured. Please go to the Settings page to configure them.',
+                { showCancel: false, confirmText: 'Go to Settings', onConfirm: () => window.location.href = 'settings.html' }
+            );
             return;
         }
 
@@ -704,32 +744,17 @@ class MainPage {
 
             utils.startWorkflowSteps();
 
-            // Get worker token
-            const tokenResponse = await utils.getWorkerToken();
-            
-            if (!tokenResponse.success) {
-                throw new Error(`Failed to get worker token: ${tokenResponse.message}`);
-            }
-
-            utils.updateTokenStep(tokenResponse.data.access_token, tokenResponse.data.expires_in);
-
             // Read and parse file
-            const text = await this.readFileAsText(this.currentFile);
-            const parsedData = Papa.parse(text, { header: true, skipEmptyLines: true });
+            const records = await utils.parseCSV(this.currentFile);
             
-            utils.addFileLoadingStep(this.currentFileInfo.name, parsedData.data.length);
+            utils.addFileLoadingStep(this.currentFileInfo.name, records.length);
             utils.addProcessingStep();
 
             // Start progress simulation
-            utils.startProgressSimulation(parsedData.data.length, 5000, this.currentFileInfo.name);
+            utils.startProgressSimulation(records.length, 5000, this.currentFileInfo.name);
 
             // Process the deletion
-            const results = await this.processDelete(parsedData.data, {
-                environmentId: settings.environmentId,
-                clientId: settings.clientId,
-                clientSecret: settings.clientSecret,
-                accessToken: tokenResponse.data.access_token
-            });
+            const results = await this.processDelete(records, credentials);
 
             utils.addFinalizingStep(results.successCount, results.errorCount, 'Delete');
             utils.completeOperationSpinner(results.successCount, results.errorCount);
@@ -782,35 +807,20 @@ class MainPage {
             utils.showOperationSpinner('Deleting User...', username, 'Single User Deletion', 1);
             utils.log('Delete Single User started – action: Delete Single User', 'info');
 
-            // Get worker token
-            const tokenResponse = await utils.getWorkerToken();
-            
-            if (!tokenResponse.success) {
-                throw new Error(`Failed to get worker token: ${tokenResponse.message}`);
-            }
-
-            // Process single user deletion
-            const result = await this.processSingleDelete(username, {
-                environmentId: settings.environmentId,
-                clientId: settings.clientId,
-                clientSecret: settings.clientSecret,
-                accessToken: tokenResponse.data.access_token
-            });
+            // Process single user deletion - server will handle token
+            const result = await this.processSingleDelete(username, settings);
 
             if (result.success) {
                 utils.completeOperationSpinner(1, 0); // 1 success, 0 failed
-                // Don't show success modal - let the spinner handle completion
-                usernameInput.value = ''; // Clear the input
-                utils.log(`Successfully deleted user: ${username}`, 'info');
+                this.updateOperationStatus('delete', 'completed', result.results);
+                this.displayResults('Delete Single User Result', [result]);
             } else {
-                throw new Error(result.message || 'Unknown error occurred');
+                throw new Error(result.message || 'Failed to delete user');
             }
 
         } catch (error) {
-            console.error('Single delete processing error:', error);
-            utils.log(`Failed to delete user: ${username} - ${error.message}`, 'error');
+            utils.handleError(error, 'deleteUserByUsername');
             utils.failOperationSpinner('step-processing', error.message);
-            // Don't show error modal - let the spinner handle completion
         }
     }
 
@@ -845,22 +855,37 @@ class MainPage {
             // Update status to show we're making the API call
             utils.updateSpinnerSubtitle('Sending import request to server...');
             
+            const payload = {
+                users: records,
+                environmentId: credentials.environmentId,
+                clientId: credentials.clientId,
+                clientSecret: credentials.clientSecret
+            };
+            
+            utils.log('Sending import payload to /api/import/bulk', 'debug', {
+                payload: {
+                    ...payload,
+                    clientSecret: 'REDACTED', // Do not log the actual secret
+                    users: `${payload.users.length} records`
+                }
+            });
+            
             const response = await fetch('/api/import/bulk', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    users: records,
-                    environmentId: credentials.environmentId,
-                    clientId: credentials.clientId,
-                    clientSecret: credentials.clientSecret
-                }),
+                body: JSON.stringify(payload),
                 signal: utils.currentOperationController.signal
             });
 
             if (!response.ok) {
                 const errorText = await response.text();
+                utils.log('Import API error response', 'error', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    errorText: errorText
+                });
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
 
@@ -976,7 +1001,12 @@ class MainPage {
             const response = await fetch('/api/delete/user', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username }),
+                body: JSON.stringify({
+                    username,
+                    environmentId: credentials.environmentId,
+                    clientId: credentials.clientId,
+                    clientSecret: credentials.clientSecret,
+                }),
                 signal: utils.currentOperationController.signal
             });
 
@@ -986,20 +1016,8 @@ class MainPage {
             }
 
             const result = await response.json();
+            return result;
             
-            // Check if the single user was successfully deleted
-            if (result.results && result.results.length > 0) {
-                const userResult = result.results[0];
-                return {
-                    success: userResult.status === 'deleted',
-                    message: userResult.message || 'User deleted successfully'
-                };
-            } else {
-                return {
-                    success: false,
-                    message: 'No result returned from server'
-                };
-            }
         } catch (error) {
             console.error('Single delete processing error:', error);
             return {

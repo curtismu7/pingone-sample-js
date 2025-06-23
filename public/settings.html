@@ -111,12 +111,21 @@
                             </div>
                         </div>
                         
-                        <div class="form-group">
-                            <label for="base-url" class="with-tooltip">
-                                Base URL
-                                <span class="tooltip-icon" data-tippy-content="The base URL for the PingOne API for your region.">i</span>
-                            </label>
-                            <input type="url" id="base-url" name="baseUrl" value="https://api.pingone.com" class="input-30char" required>
+                        <!-- Advanced Settings Section (Collapsible) -->
+                        <div class="advanced-section">
+                            <div class="advanced-header" id="advanced-header">
+                                <h4>Advanced</h4>
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                            <div class="advanced-content" id="advanced-content">
+                                <div class="form-group">
+                                    <label for="base-url" class="with-tooltip">
+                                        API Base URL
+                                        <span class="tooltip-icon" data-tippy-content="The base URL for the PingOne API for your region. E.g. https://api.pingone.eu">i</span>
+                                    </label>
+                                    <input type="url" id="base-url" name="baseUrl" value="https://api.pingone.com" class="input-30char" required>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="form-group form-row">
@@ -157,60 +166,32 @@
                             <input type="file" id="default-file" name="defaultFile" accept=".csv" class="input-50char">
                             <div id="current-default-file" class="current-file-info"></div>
                         </div>
-                        
-
                     </form>
                 </div>
             </section>
 
-            <!-- CSV Format Configuration for Modifications -->
-            <section class="config-group">
+            <!-- Modify Attributes Selection -->
+            <section class="config-group" id="modify-attributes-config">
                 <div class="group-header">
-                    <h2>CSV Format Configuration</h2>
+                    <h2>Modify User Attributes</h2>
                 </div>
                 <div class="group-content">
                     <div class="csv-format-config">
-                        <h4>Modification Fields</h4>
-                        <p>Select which fields should be included when modifying users:</p>
-                        
-                        <div class="checkbox-grid">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="modify-email" name="modifyFields" value="email" checked>
-                                <span>Email Address</span>
+                        <h4 class="config-title">When modifying users, update:</h4>
+                        <div class="checkbox-grid-controls">
+                            <label class="checkbox-label select-all-label">
+                                <input type="checkbox" id="select-all-modify-fields">
+                                <span>Select all/unselect all</span>
+                                <span class="tooltip-icon" data-tippy-content="Toggle all user attributes below.">i</span>
                             </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="modify-firstname" name="modifyFields" value="firstName" checked>
-                                <span>First Name</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="modify-lastname" name="modifyFields" value="lastName" checked>
-                                <span>Last Name</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="modify-username" name="modifyFields" value="username">
-                                <span>Username</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="modify-enabled" name="modifyFields" value="enabled" checked>
-                                <span>Account Status</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="modify-phone" name="modifyFields" value="phone">
-                                <span>Phone Number</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="modify-title" name="modifyFields" value="title">
-                                <span>Job Title</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="modify-department" name="modifyFields" value="department">
-                                <span>Department</span>
-                            </label>
+                        </div>
+                        <div id="modify-fields-grid" class="checkbox-grid">
+                            <!-- Attributes will be dynamically inserted here -->
                         </div>
                     </div>
                 </div>
             </section>
-            
+
             <!-- Save Configuration Action -->
             <div class="action-buttons centered">
                 <button type="button" id="save-all-settings" class="btn-pill">
