@@ -32,11 +32,16 @@ router.post('/', (req, res) => {
 
 // Get current logging status and configuration
 router.get('/config', (req, res) => {
-    res.json({
-        logLevel: 'info',
-        logFormat: 'json',
-        logRetention: '7d'
-    });
+    try {
+        res.json({
+            isLogging: logManager.config.isLogging,
+            logFile: logManager.config.logFile,
+            logLevel: 'info',
+            lastUpdated: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to get logging configuration' });
+    }
 });
 
 // Update logging configuration
@@ -53,9 +58,18 @@ router.post('/config', (req, res) => {
 router.post('/start', (req, res) => {
     try {
         logManager.startFileLogging();
-        res.status(200).json({ message: 'File logging started.' });
+        res.status(200).json({ 
+            success: true,
+            message: 'File logging started',
+            isLogging: true,
+            logFile: logManager.config.logFile
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to start file logging.', error: error.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Failed to start file logging',
+            error: error.message 
+        });
     }
 });
 
@@ -63,9 +77,17 @@ router.post('/start', (req, res) => {
 router.post('/stop', (req, res) => {
     try {
         logManager.stopFileLogging();
-        res.status(200).json({ message: 'File logging stopped.' });
+        res.status(200).json({ 
+            success: true,
+            message: 'File logging stopped',
+            isLogging: false
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to stop file logging.', error: error.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Failed to stop file logging',
+            error: error.message 
+        });
     }
 });
 

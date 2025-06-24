@@ -4,6 +4,7 @@ class SettingsPage {
     constructor() {
         // Only initialize if we're on the settings page
         if (this.isSettingsPage()) {
+            this.defaultFileName = null; // Store the selected file name
             this.init();
         }
     }
@@ -75,10 +76,27 @@ class SettingsPage {
     }
 
     setupEventListeners() {
-        document.getElementById('save-all-settings')?.addEventListener('click', () => this.saveAllSettings());
-        document.getElementById('test-credentials')?.addEventListener('click', () => this.testCredentials());
+        // Auto-save form inputs
+        const form = document.getElementById('credentials-form');
+        if (form) {
+            // Auto-save on input change for text fields
+            form.querySelectorAll('input[type="text"], input[type="password"], input[type="url"]').forEach(input => {
+                input.addEventListener('change', () => this.saveSetting(input.name, input.value));
+                input.addEventListener('blur', () => this.saveSetting(input.name, input.value));
+            });
+            
+            // Auto-save on change for checkboxes
+            form.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', () => this.saveSetting(checkbox.name, checkbox.checked));
+            });
+        }
+        
+        // File input handling
         document.getElementById('default-file')?.addEventListener('change', (e) => this.handleDefaultFileSelect(e));
         document.getElementById('toggle-secret')?.addEventListener('click', () => this.toggleSecretVisibility());
+        
+        // Test credentials button
+        document.getElementById('test-credentials')?.addEventListener('click', () => this.testCredentials());
         
         // Sidebar Quick Actions
         this.setupSidebarNavigation();
@@ -91,8 +109,34 @@ class SettingsPage {
         document.getElementById('stop-logging-btn')?.addEventListener('click', () => this.stopLogging());
         document.getElementById('export-log-btn')?.addEventListener('click', () => this.exportLog());
         document.getElementById('clear-log-btn')?.addEventListener('click', () => this.clearLog());
-        document.getElementById('log-file-name')?.addEventListener('change', (e) => this.updateLogConfig(e));
-        document.getElementById('select-all-modify-fields')?.addEventListener('click', (e) => this.toggleAllModifyFields(e.target.checked));
+        
+        // Auto-save log file name changes
+        const logFileNameInput = document.getElementById('log-file-name');
+        if (logFileNameInput) {
+            logFileNameInput.addEventListener('change', (e) => this.updateLogConfig(e));
+            logFileNameInput.addEventListener('blur', (e) => this.updateLogConfig(e));
+        }
+        
+        // User attributes checkboxes
+        const modifyFieldsGrid = document.getElementById('modify-fields-grid');
+        if (modifyFieldsGrid) {
+            modifyFieldsGrid.addEventListener('change', (e) => {
+                if (e.target.matches('input[type="checkbox"]')) {
+                    this.saveUserAttributes();
+                }
+            });
+        }
+        
+        // Handle select all checkbox
+        const selectAllCheckbox = document.getElementById('select-all-modify-fields');
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', (e) => {
+                this.toggleAllModifyFields(e.target.checked);
+                this.saveUserAttributes();
+            });
+        }
+        
+        // Advanced section toggle
         document.getElementById('advanced-header')?.addEventListener('click', () => this.toggleAdvancedSection());
     }
 
@@ -226,44 +270,66 @@ class SettingsPage {
 
     loadSettings() {
         try {
-            const settings = utils.loadSettings();
-            if (settings) {
-                this.populateFormFields(settings);
-                utils.log('Settings loaded from storage', 'info');
-                this.loadLogSettings(); // Load logging settings
+            const settings = utils.loadSettings() || {};
+            
+            // Load default file if exists
+            if (settings.defaultFile) {
+                this.updateDefaultFileDisplay(settings.defaultFile);
+                
+                // Try to restore the file input value
+                const fileInput = document.getElementById('default-file');
+                if (fileInput) {
+                    // Create a fake File object for the input
+                    const file = new File(
+                        [settings.defaultFile.content || ''],
+                        settings.defaultFile.name,
+                        {
+                            type: settings.defaultFile.type || 'text/csv',
+                            lastModified: settings.defaultFile.lastModified || Date.now()
+                        }
+                    );
+                    
+                    // Create a DataTransfer to set the file
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    
+                    // Set the files on the input
+                    fileInput.files = dataTransfer.files;
+                    
+                    // Update the file reference
+                    this.defaultFileName = file.name;
+                }
+            }
+            
+            // Credentials - with null checks
+            const envIdEl = document.getElementById('environment-id');
+            const clientIdEl = document.getElementById('client-id');
+            const clientSecretEl = document.getElementById('client-secret');
+            const baseUrlEl = document.getElementById('base-url');
+            const saveCredentialsEl = document.getElementById('save-credentials');
+            const useClientSecretEl = document.getElementById('use-client-secret');
+
+            if (envIdEl) envIdEl.value = settings.environmentId || '';
+            if (clientIdEl) clientIdEl.value = settings.clientId || '';
+            if (clientSecretEl) clientSecretEl.value = settings.clientSecret || '';
+            if (baseUrlEl) baseUrlEl.value = settings.baseUrl || 'https://api.pingone.com';
+            if (saveCredentialsEl) saveCredentialsEl.checked = settings.saveCredentials || false;
+            if (useClientSecretEl) useClientSecretEl.checked = settings.useClientSecret || false;
+
+            // App settings
+            if (settings.defaultFileName) {
+                this.updateDefaultFileDisplay(settings.defaultFileName);
+            }
+
+            // Modify fields
+            if (settings.modifyFields && Array.isArray(settings.modifyFields)) {
+                const allFields = document.querySelectorAll('input[name="modifyFields"]');
+                allFields.forEach(checkbox => {
+                    checkbox.checked = settings.modifyFields.includes(checkbox.value);
+                });
             }
         } catch (error) {
-            utils.handleError(error, 'loadSettings');
-        }
-    }
-
-    populateFormFields(settings) {
-        // Credentials - with null checks
-        const envIdEl = document.getElementById('environment-id');
-        const clientIdEl = document.getElementById('client-id');
-        const clientSecretEl = document.getElementById('client-secret');
-        const baseUrlEl = document.getElementById('base-url');
-        const saveCredentialsEl = document.getElementById('save-credentials');
-        const useClientSecretEl = document.getElementById('use-client-secret');
-
-        if (envIdEl) envIdEl.value = settings.environmentId || '';
-        if (clientIdEl) clientIdEl.value = settings.clientId || '';
-        if (clientSecretEl) clientSecretEl.value = settings.clientSecret || '';
-        if (baseUrlEl) baseUrlEl.value = settings.baseUrl || 'https://api.pingone.com';
-        if (saveCredentialsEl) saveCredentialsEl.checked = settings.saveCredentials || false;
-        if (useClientSecretEl) useClientSecretEl.checked = settings.useClientSecret || false;
-
-        // App settings
-        if (settings.defaultFileName) {
-            this.updateDefaultFileDisplay(settings.defaultFileName);
-        }
-
-        // Modify fields
-        if (settings.modifyFields && Array.isArray(settings.modifyFields)) {
-            const allFields = document.querySelectorAll('input[name="modifyFields"]');
-            allFields.forEach(checkbox => {
-                checkbox.checked = settings.modifyFields.includes(checkbox.value);
-            });
+            console.error('Error loading settings:', error);
         }
     }
 
@@ -305,7 +371,7 @@ class SettingsPage {
                 baseUrl,
                 saveCredentials,
                 useClientSecret,
-                defaultFileName
+                defaultFileName: defaultFileName || undefined
             };
 
             const modifyFields = Array.from(document.querySelectorAll('input[name="modifyFields"]:checked')).map(cb => cb.value);
@@ -373,8 +439,9 @@ class SettingsPage {
             );
 
             if (testResult.success) {
-                this.updateTokenStatus('valid', `✓ Credentials are valid - Environment: ${testResult.environment.name}`);
-                utils.log(`Credentials test successful for environment ${currentCreds.environmentId.substring(0, 8)}...`, 'info');
+                const envName = testResult.data?.environment?.name || 'Environment';
+                this.updateTokenStatus('valid', `✓ Credentials are valid - ${envName}`, envName);
+                utils.log(`Credentials test successful for environment ${envName} (${currentCreds.environmentId.substring(0, 8)}...)`, 'info');
                 // Clear any cached token to force fresh authentication
                 utils.clearTokenCache();
             } else {
@@ -396,11 +463,21 @@ class SettingsPage {
         }
     }
 
-    updateTokenStatus(status, message) {
+    updateTokenStatus(status, message, envName = '') {
         const tokenStatus = document.getElementById('token-status');
         if (!tokenStatus) return;
         tokenStatus.textContent = message;
         tokenStatus.className = `token-status ${status}`;
+        
+        // Save token status to settings
+        const settings = utils.getSettings() || {};
+        settings.tokenStatus = {
+            status,
+            message,
+            envName,
+            timestamp: new Date().toISOString()
+        };
+        utils.saveSettings(settings);
     }
 
     startTokenStatusCheck() {
@@ -410,58 +487,341 @@ class SettingsPage {
 
     async checkTokenStatus() {
         try {
+            const settings = utils.getSettings() || {};
             const credentials = utils.getStoredCredentials();
+            
+            // If we have a valid cached status from a recent check, use it
+            if (settings.tokenStatus) {
+                const statusAge = new Date() - new Date(settings.tokenStatus.timestamp);
+                const maxStatusAge = 5 * 60 * 1000; // 5 minutes
+                
+                if (statusAge < maxStatusAge && settings.tokenStatus.status === 'valid') {
+                    const message = settings.tokenStatus.envName 
+                        ? `✓ Credentials are valid - ${settings.tokenStatus.envName}`
+                        : '✓ Credentials are valid';
+                    this.updateTokenStatus('valid', message, settings.tokenStatus.envName);
+                    return;
+                }
+            }
+            
             if (!credentials) {
                 this.updateTokenStatus('expired', 'Credentials may be expired or invalid. Please test.');
                 return;
             }
+            
             // A simple check without forcing a token refetch
             if (utils.isTokenValid()) {
-                 this.updateTokenStatus('valid', '✓ Credentials appear to be valid.');
+                // If we have a saved environment name, use it
+                const envName = settings.tokenStatus?.envName || '';
+                const message = envName 
+                    ? `✓ Credentials are valid - ${envName}`
+                    : '✓ Credentials appear to be valid';
+                this.updateTokenStatus('valid', message, envName);
             } else {
-                 this.updateTokenStatus('expired', 'Credentials may be expired or invalid. Please test.');
+                this.updateTokenStatus('expired', 'Credentials may be expired or invalid. Please test.');
             }
         } catch (error) {
             this.updateTokenStatus('expired', '✗ Could not verify token status.');
         }
     }
 
-    handleDefaultFileSelect(event) {
+    async handleDefaultFileSelect(event) {
         const file = event.target.files[0];
-        if (file) {
-            this.updateDefaultFileDisplay(file.name);
-            // We only store the name, not the file content itself in settings
-        }
-    }
-    
-    updateDefaultFileDisplay(fileName) {
-        const display = document.getElementById('current-default-file');
-        if (display) {
-            if (fileName) {
-                display.innerHTML = `
-                    <span class="file-label">Current:</span> 
-                    <span class="file-name">${fileName}</span>
-                `;
-                display.classList.add('show');
-            } else {
-                display.innerHTML = '';
-                display.classList.remove('show');
+        if (!file) return;
+        
+        const fileInput = event.target;
+        const loadingText = document.createElement('div');
+        loadingText.className = 'loading-text';
+        loadingText.textContent = 'Processing file...';
+        fileInput.disabled = true;
+        fileInput.parentNode.insertBefore(loadingText, fileInput.nextSibling);
+        
+        try {
+            // Read file content
+            const fileContent = await this.readFileAsText(file);
+            
+            // Create file info object with content
+            const fileInfo = {
+                name: file.name,
+                size: file.size,
+                lastModified: file.lastModified,
+                type: file.type,
+                content: fileContent
+            };
+            
+            // Save to localStorage
+            localStorage.setItem('settingsDefaultFile', JSON.stringify(fileInfo));
+            
+            // Update settings
+            const settings = utils.getSettings() || {};
+            settings.defaultFile = fileInfo;
+            settings.settingsDefaultFile = fileInfo; // For backward compatibility
+            utils.saveSettings(settings);
+            
+            // Update UI with full file info
+            this.updateDefaultFileDisplay(fileInfo);
+            
+            // Show success message
+            utils.showSuccessMessage(`Default file set: ${file.name}`);
+            
+            console.log(`Default file set to: ${file.name}`);
+            
+        } catch (error) {
+            console.error('Error setting default file:', error);
+            utils.showErrorMessage(`Failed to set default file: ${error.message || 'Unknown error'}`);
+            fileInput.value = ''; // Reset file input on error
+        } finally {
+            // Clean up loading state
+            fileInput.disabled = false;
+            if (loadingText.parentNode) {
+                loadingText.parentNode.removeChild(loadingText);
             }
         }
     }
 
-    // --- Logging Methods ---
+    readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+    }
+
+    updateDefaultFileDisplay(fileInfo) {
+        const display = document.getElementById('current-default-file');
+        const fileInput = document.getElementById('default-file');
+        
+        if (!display) return;
+        
+        if (fileInfo && fileInfo.name) {
+            // Format file size if available
+            const fileSize = fileInfo.size ? ` (${(fileInfo.size / 1024).toLocaleString(undefined, {maximumFractionDigits: 1})} KB)` : '';
+            const lastModified = fileInfo.lastModified ? new Date(fileInfo.lastModified).toLocaleString() : 'N/A';
+            
+            // Parse CSV to get row count and headers if content is available
+            let rowCount = 0;
+            let headers = [];
+            let sampleData = [];
+            
+            if (fileInfo.content) {
+                try {
+                    const lines = fileInfo.content.split('\n').filter(line => line.trim() !== '');
+                    rowCount = lines.length > 0 ? lines.length - 1 : 0; // Subtract 1 for header
+                    
+                    if (lines.length > 0) {
+                        // Parse headers and first few rows for preview
+                        headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+                        
+                        // Get up to 3 rows of sample data
+                        const maxSampleRows = Math.min(3, lines.length - 1);
+                        for (let i = 1; i <= maxSampleRows; i++) {
+                            const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+                            const row = {};
+                            headers.forEach((header, index) => {
+                                row[header] = values[index] || '';
+                            });
+                            sampleData.push(row);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error parsing CSV content:', e);
+                }
+            }
+            
+            // Format the file details HTML
+            display.innerHTML = `
+                <div class="file-display">
+                    <div class="file-info">
+                        <i class="fas fa-file-csv file-icon"></i>
+                        <div class="file-details">
+                            <div class="file-name">
+                                <i class="fas fa-file-csv"></i>
+                                <span>${fileInfo.name}</span>
+                                <span class="file-size">${fileSize}</span>
+                            </div>
+                            <div class="file-meta">
+                                <span class="file-meta-item">
+                                    <i class="far fa-calendar-alt"></i> Modified: ${lastModified}
+                                </span>
+                                ${rowCount > 0 ? `
+                                <span class="file-meta-item">
+                                    <i class="fas fa-list-ol"></i> ${rowCount.toLocaleString()} rows
+                                </span>` : ''}
+                                ${headers.length > 0 ? `
+                                <span class="file-meta-item">
+                                    <i class="fas fa-columns"></i> ${headers.length} columns
+                                </span>` : ''}
+                            </div>
+                            
+                            ${headers.length > 0 ? `
+                            <div class="file-preview">
+                                <div class="preview-header">Preview:</div>
+                                <div class="preview-table-container">
+                                    <table class="preview-table">
+                                        <thead>
+                                            <tr>
+                                                ${headers.map(header => 
+                                                    `<th>${header}</th>`
+                                                ).join('')}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${sampleData.map(row => `
+                                                <tr>
+                                                    ${headers.map(header => 
+                                                        `<td>${row[header] || ''}</td>`
+                                                    ).join('')}
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>` : ''}
+                            
+                            <div class="file-actions">
+                                <button type="button" class="btn-clear" title="Clear file">
+                                    <i class="fas fa-times"></i> Clear File
+                                </button>
+                                <button type="button" class="btn-view" title="View full file">
+                                    <i class="fas fa-expand"></i> View Full
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            
+            // Add event listeners
+            const clearBtn = display.querySelector('.btn-clear');
+            const viewBtn = display.querySelector('.btn-view');
+            
+            if (clearBtn) {
+                clearBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Clear the file input
+                    if (fileInput) {
+                        fileInput.value = '';
+                    }
+                    
+                    // Clear from settings
+                    this.saveSetting('defaultFile', null);
+                    
+                    // Update UI
+                    display.innerHTML = '<div class="no-file">No file selected</div>';
+                    display.classList.remove('show');
+                    
+                    // Show success message
+                    utils.showSuccessMessage('Default file cleared');
+                });
+            }
+            
+            if (viewBtn) {
+                viewBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Show a modal with the full file content
+                    const modalContent = `
+                        <div class="file-modal-content">
+                            <h3>${fileInfo.name}</h3>
+                            <div class="file-content">
+                                <pre>${fileInfo.content || 'No content available'}</pre>
+                            </div>
+                        </div>
+                    `;
+                    
+                    utils.showModal('File Content', modalContent, {
+                        width: '90%',
+                        height: '80%',
+                        maxWidth: '1200px'
+                    });
+                });
+            }
+            
+            display.classList.add('show');
+        } else {
+            display.innerHTML = '<div class="no-file">No file selected</div>';
+            display.classList.remove('show');
+        }
+    }
+
+    async saveSetting(key, value) {
+        try {
+            const settings = utils.getSettings() || {};
+            settings[key] = value;
+            
+            // Save to localStorage for persistence
+            localStorage.setItem(`setting_${key}`, JSON.stringify(value));
+            
+            // Save to settings
+            utils.saveSettings(settings);
+            
+            // Special handling for certain settings
+            if (key === 'logFileName') {
+                await this.updateLogConfig({ target: { value } });
+            }
+            
+            console.log(`Setting saved: ${key} =`, value);
+        } catch (error) {
+            console.error('Error saving setting:', error);
+            utils.showErrorMessage(`Failed to save ${key}`);
+        }
+    }
+
+    saveUserAttributes() {
+        try {
+            const checkboxes = document.querySelectorAll('#modify-fields-grid input[type="checkbox"]');
+            const selectedAttrs = [];
+            
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedAttrs.push(checkbox.name);
+                }
+            });
+            
+            // Save to settings
+            const settings = utils.getSettings() || {};
+            settings.userAttributes = selectedAttrs;
+            utils.saveSettings(settings);
+            
+            // Also save to localStorage for immediate persistence
+            localStorage.setItem('userAttributes', JSON.stringify(selectedAttrs));
+            
+            // Update select all checkbox
+            this.updateSelectAllCheckbox();
+            
+            console.log('User attributes saved:', selectedAttrs);
+            return true;
+        } catch (error) {
+            console.error('Error saving user attributes:', error);
+            utils.showErrorMessage('Failed to save user attributes');
+            return false;
+        }
+    }
 
     async loadLogSettings() {
         try {
             const response = await fetch('/api/logs/config');
             if (!response.ok) throw new Error('Failed to fetch log config');
             const config = await response.json();
-            document.getElementById('log-file-name').value = config.logFile || 'import-status.log';
+            
+            // Update log file name input
+            const logFileNameInput = document.getElementById('log-file-name');
+            if (logFileNameInput) {
+                logFileNameInput.value = config.logFile || 'import-status.log';
+            }
+            
+            // Update logging state
             this.updateLoggingButtons(config.isLogging);
             this.updateLoggingStatus(config.isLogging);
+            
+            return config;
         } catch (error) {
+            console.error('Error loading log settings:', error);
             utils.handleError(error, 'loadLogSettings');
+            return { isLogging: false };
         }
     }
 
@@ -481,24 +841,66 @@ class SettingsPage {
     }
 
     async startLogging() {
+        const loadingElement = document.getElementById('logging-loading');
         try {
-            await fetch('/api/logs/start', { method: 'POST' });
+            if (loadingElement) loadingElement.style.display = 'block';
+            
+            const response = await fetch('/api/logs/start', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.message || 'Failed to start logging');
+            }
+            
+            const result = await response.json();
             this.updateLoggingButtons(true);
             this.updateLoggingStatus(true);
+            utils.showSuccessMessage(result.message || 'Logging started successfully');
             console.log('File logging has been started');
+            return result;
         } catch (error) {
-            utils.handleError(error, 'startLogging');
+            console.error('Error starting logging:', error);
+            utils.showErrorMessage(error.message || 'Failed to start logging');
+            // Re-fetch the current state to ensure UI is in sync
+            await this.loadLogSettings();
+            throw error;
+        } finally {
+            if (loadingElement) loadingElement.style.display = 'none';
         }
     }
 
     async stopLogging() {
+        const loadingElement = document.getElementById('logging-loading');
         try {
-            await fetch('/api/logs/stop', { method: 'POST' });
+            if (loadingElement) loadingElement.style.display = 'block';
+            
+            const response = await fetch('/api/logs/stop', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.message || 'Failed to stop logging');
+            }
+            
+            const result = await response.json();
             this.updateLoggingButtons(false);
             this.updateLoggingStatus(false);
+            utils.showSuccessMessage(result.message || 'Logging stopped successfully');
             console.log('File logging has been stopped');
+            return result;
         } catch (error) {
-            utils.handleError(error, 'stopLogging');
+            console.error('Error stopping logging:', error);
+            utils.showErrorMessage(error.message || 'Failed to stop logging');
+            // Re-fetch the current state to ensure UI is in sync
+            await this.loadLogSettings();
+            throw error;
+        } finally {
+            if (loadingElement) loadingElement.style.display = 'none';
         }
     }
 
@@ -522,12 +924,14 @@ class SettingsPage {
     updateLoggingButtons(isLogging) {
         const startBtn = document.getElementById('start-logging-btn');
         const stopBtn = document.getElementById('stop-logging-btn');
-        if (isLogging) {
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-        } else {
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
+        
+        if (startBtn && stopBtn) {
+            startBtn.disabled = isLogging;
+            stopBtn.disabled = !isLogging;
+            
+            // Toggle button visibility based on logging state
+            startBtn.style.display = isLogging ? 'none' : 'inline-block';
+            stopBtn.style.display = isLogging ? 'inline-block' : 'none';
         }
     }
 
@@ -535,6 +939,7 @@ class SettingsPage {
         const statusContainer = document.getElementById('logging-status');
         const statusValue = statusContainer?.querySelector('.status-value');
         const statusIcon = statusContainer?.querySelector('.status-icon');
+        const logFileNameEl = document.getElementById('current-log-file');
 
         if (!statusContainer || !statusValue || !statusIcon) return;
 
@@ -544,18 +949,41 @@ class SettingsPage {
         }
 
         const statusMap = {
-            active: { text: 'Active', icon: '✓', colorClass: 'active' },
-            inactive: { text: 'Inactive', icon: '✗', colorClass: 'inactive' },
-            empty: { text: 'Empty', icon: '✓', colorClass: 'empty' }
+            active: { 
+                text: 'Active', 
+                icon: '✓', 
+                colorClass: 'active',
+                description: 'Logging is currently active and recording events.'
+            },
+            inactive: { 
+                text: 'Inactive', 
+                icon: '✗', 
+                colorClass: 'inactive',
+                description: 'Logging is currently inactive.'
+            },
+            empty: { 
+                text: 'Empty', 
+                icon: '✓', 
+                colorClass: 'empty',
+                description: 'Log file is empty.'
+            }
         };
 
-        const { text, icon, colorClass } = statusMap[currentStatus] || statusMap.inactive;
+        const { text, icon, colorClass, description } = statusMap[currentStatus] || statusMap.inactive;
         
+        // Update status display
         statusValue.textContent = text;
         statusIcon.textContent = icon;
-        
-        statusContainer.className = 'status-display'; // Reset classes
+        statusContainer.className = 'status-display';
         statusContainer.classList.add(colorClass);
+        statusContainer.title = description;
+        
+        // Update log file display if element exists
+        if (logFileNameEl) {
+            const logFileName = document.getElementById('log-file-name')?.value || 'import-status.log';
+            logFileNameEl.textContent = logFileName;
+            logFileNameEl.title = `Log file: ${logFileName}`;
+        }
     }
 
     setupModifyFields() {
@@ -608,4 +1036,4 @@ class SettingsPage {
 // Only initialize if on settings page
 if (document.getElementById('environment-id')) {
     window.settingsPage = new SettingsPage();
-} 
+}

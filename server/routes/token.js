@@ -70,6 +70,51 @@ async function getWorkerToken(environmentId, clientId, clientSecret) {
     }
 }
 
+// Test endpoint for token verification
+router.post('/test', async (req, res) => {
+    try {
+        const { environmentId, clientId, clientSecret } = req.body;
+        
+        if (!environmentId || !clientId || !clientSecret) {
+            return res.status(400).json({ 
+                error: 'Missing required parameters',
+                required: ['environmentId', 'clientId', 'clientSecret']
+            });
+        }
+
+        // Get token first to validate credentials
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        
+        // If we got here, credentials are valid, now get environment details
+        const envResponse = await axios.get(
+            `https://api.pingone.com/v1/environments/${environmentId}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        // Return success with environment details
+        res.json({ 
+            success: true, 
+            data: {
+                environment: {
+                    id: environmentId,
+                    name: envResponse.data.name || 'PingOne Environment'
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Test token error:', error);
+        res.status(500).json({ 
+            error: 'Failed to get token',
+            details: error.message 
+        });
+    }
+});
+
 // Export the router and functions
 module.exports = {
     router,
