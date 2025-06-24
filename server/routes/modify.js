@@ -5,6 +5,42 @@ const { getWorkerToken } = require('./token');
 
 const router = express.Router();
 
+// Store active SSE connections
+const sseConnections = new Map();
+
+// SSE endpoint for progress updates
+router.get('/progress/:operationId', (req, res) => {
+    const { operationId } = req.params;
+    
+    // Set SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Store connection
+    sseConnections.set(operationId, res);
+
+    // Send initial connection message
+    res.write(`data: ${JSON.stringify({ type: 'connected', operationId })}\n\n`);
+
+    // Handle client disconnect
+    req.on('close', () => {
+        sseConnections.delete(operationId);
+    });
+});
+
+// Helper function to send progress updates
+function sendProgressUpdate(operationId, data) {
+    const connection = sseConnections.get(operationId);
+    if (connection) {
+        connection.write(`data: ${JSON.stringify(data)}\n\n`);
+    }
+}
+
 // PUT /api/modify/user/:userId - Modify a specific user
 router.put('/user/:userId', async (req, res) => {
     try {
@@ -141,6 +177,9 @@ router.patch('/user/:userId', async (req, res) => {
 
 // POST /api/modify/bulk - Bulk modify users
 router.post('/bulk', async (req, res) => {
+    const startTime = Date.now();
+    const operationId = `modify_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     try {
         const { users, environmentId, clientId, clientSecret } = req.body;
         
@@ -150,18 +189,43 @@ router.post('/bulk', async (req, res) => {
             });
         }
 
+        // Send initial progress update
+        sendProgressUpdate(operationId, {
+            type: 'progress',
+            current: 0,
+            total: users.length,
+            success: 0,
+            errors: 0,
+            skipped: 0,
+            message: 'Starting bulk modification...'
+        });
+
         logManager.info('Starting bulk user modification', {
             userCount: users.length,
-            environmentId
+            environmentId,
+            operationId
         });
 
         const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        
+        // Send token acquisition update
+        sendProgressUpdate(operationId, {
+            type: 'progress',
+            current: 0,
+            total: users.length,
+            success: 0,
+            errors: 0,
+            skipped: 0,
+            message: 'Getting authentication token...'
+        });
+        
         const results = [];
         let successCount = 0;
         let errorCount = 0;
-        const startTime = Date.now();
+        let skippedCount = 0;
 
-        for (const userUpdate of users) {
+        for (let i = 0; i < users.length; i++) {
+            const userUpdate = users[i];
             try {
                 const { userId, userData, username } = userUpdate;
                 
@@ -174,6 +238,7 @@ router.post('/bulk', async (req, res) => {
                 }
 
                 let targetUserId = userId;
+                let currentUserData = null;
                 
                 // If we have username but no userId, find the user first
                 if (!userId && username) {
@@ -187,7 +252,7 @@ router.post('/bulk', async (req, res) => {
                                 'Content-Type': 'application/json'
                             },
                             params: {
-                                filter: `username eq "${username}"`
+                                filter: `username eq \"${username}\"`
                             }
                         }
                     );
@@ -197,28 +262,67 @@ router.post('/bulk', async (req, res) => {
                     }
                     
                     targetUserId = searchResponse.data._embedded.users[0].id;
+                    currentUserData = searchResponse.data._embedded.users[0];
+                } else {
+                    // Fetch current user data by userId
+                    const getUserResponse = await axios.get(
+                        `https://api.pingone.com/v1/environments/${environmentId}/users/${targetUserId}`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        }
+                    );
+                    currentUserData = getUserResponse.data;
                 }
 
-                const response = await axios.patch(
-                    `https://api.pingone.com/v1/environments/${environmentId}/users/${targetUserId}`,
-                    userData,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
+                // Compare userData to currentUserData (shallow compare for relevant fields)
+                const isNoChange = Object.keys(userData).every(key => {
+                    // For nested objects (like name), do a shallow compare
+                    if (typeof userData[key] === 'object' && userData[key] !== null && currentUserData[key]) {
+                        return Object.keys(userData[key]).every(subKey => {
+                            return userData[key][subKey] === currentUserData[key][subKey];
+                        });
+                    } else {
+                        return userData[key] === currentUserData[key];
                     }
-                );
-
-                results.push({
-                    userId: targetUserId,
-                    username: username || 'unknown',
-                    status: 'success',
-                    message: 'User modified successfully',
-                    user: response.data
                 });
-                
-                successCount++;
+
+                if (isNoChange) {
+                    results.push({
+                        userId: targetUserId,
+                        username: username || 'unknown',
+                        status: 'skipped',
+                        message: 'No changes detected (skipped)',
+                        user: currentUserData
+                    });
+                    logManager.logUserAction('modify', { userId: targetUserId, username, status: 'skipped', message: 'No changes detected (skipped)', });
+                    skippedCount++;
+                } else {
+                    // Only PATCH if there are changes
+                    const response = await axios.patch(
+                        `https://api.pingone.com/v1/environments/${environmentId}/users/${targetUserId}`,
+                        userData,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        }
+                    );
+
+                    results.push({
+                        userId: targetUserId,
+                        username: username || 'unknown',
+                        status: 'success',
+                        message: 'User modified successfully',
+                        user: response.data
+                    });
+                    logManager.logUserAction('modify', { userId: targetUserId, username, status: 'success', message: 'User modified successfully', });
+                    
+                    successCount++;
+                }
                 
             } catch (error) {
                 logManager.error('Individual user modification error', {
@@ -237,43 +341,92 @@ router.post('/bulk', async (req, res) => {
                     status: 'error',
                     message: errorMessage
                 });
+                logManager.logUserAction('modify', { userId: userUpdate.userId || 'unknown', username: userUpdate.username || 'unknown', status: 'error', message: errorMessage });
                 
                 errorCount++;
+            }
+
+            // Send real-time progress update
+            sendProgressUpdate(operationId, {
+                type: 'progress',
+                current: i + 1,
+                total: users.length,
+                success: successCount,
+                errors: errorCount,
+                skipped: skippedCount,
+                message: `Processing user ${i + 1} of ${users.length}`
+            });
+
+            // Log progress every 10 users to track performance
+            if ((i + 1) % 10 === 0) {
+                logManager.info('Modify progress', {
+                    processed: i + 1,
+                    total: users.length,
+                    success: successCount,
+                    errors: errorCount,
+                    skipped: skippedCount
+                });
             }
         }
 
         const duration = Date.now() - startTime;
+        
+        // Send completion update
+        sendProgressUpdate(operationId, {
+            type: 'complete',
+            current: users.length,
+            total: users.length,
+            success: successCount,
+            errors: errorCount,
+            skipped: skippedCount,
+            duration: duration,
+            message: 'Modify completed'
+        });
         
         // Enhanced totals logging
         logManager.info('MODIFY TOTALS - Bulk User Modification Completed', {
             totalRecords: users.length,
             successful: successCount,
             failed: errorCount,
-            skipped: 0, // Modify doesn't have skipped records
+            skipped: skippedCount,
             duration: `${duration}ms`,
             successRate: `${Math.round((successCount / users.length) * 100)}%`
         });
         
         // Log structured totals for easy reading
-        logManager.logStructured(`MODIFY TOTALS: Total=${users.length}, Modified=${successCount}, Failed=${errorCount}, Skipped=0, Duration=${duration}ms`);
+        logManager.logStructured(`MODIFY TOTALS: Total=${users.length}, Modified=${successCount}, Failed=${errorCount}, Skipped=${skippedCount}, Duration=${duration}ms`);
         
         logManager.info('Bulk user modification completed', {
             total: users.length,
             successCount,
-            errorCount
+            errorCount,
+            skippedCount
         });
 
         res.json({
             success: true,
             results,
+            successCount,
+            errorCount,
+            skippedCount,
+            operationId,
             summary: {
                 total: users.length,
                 successful: successCount,
-                failed: errorCount
+                failed: errorCount,
+                skipped: skippedCount,
+                duration: duration
             }
         });
 
     } catch (error) {
+        // Send error update
+        sendProgressUpdate(operationId, {
+            type: 'error',
+            message: error.message,
+            error: true
+        });
+
         logManager.error('Bulk user modification error', {
             error: error.message,
             stack: error.stack
@@ -281,11 +434,11 @@ router.post('/bulk', async (req, res) => {
 
         res.status(500).json({
             error: 'Failed to perform bulk user modification',
-            details: error.message
+            details: error.message,
+            operationId
         });
     }
 });
-
 // POST /api/modify/by-username - Modify user by username
 router.post('/by-username', async (req, res) => {
     try {

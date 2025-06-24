@@ -1,3 +1,9 @@
+// ============================================================================
+// PINGONE USER MANAGEMENT - LOG MANAGER
+// ============================================================================
+// Handles structured logging for all PingOne API operations
+// Features: One-line API calls, clear section dividers, library loads
+
 const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
@@ -12,21 +18,17 @@ class LogManager {
         this.fileTransport = null;
         this.logger = this.createLogger();
         this.ensureLogDirectory();
-        // Start file logging immediately.
         this.startFileLogging();
     }
 
     createLogger() {
-        // Custom format for structured logging
         const structuredFormat = winston.format.combine(
             winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
             winston.format.errors({ stack: true }),
             winston.format.printf(info => {
                 if (info.structured) {
-                    // Use structured format for special log entries
                     return `[${info.timestamp}] ${info.message}`;
                 } else {
-                    // Use JSON format for regular logs
                     return JSON.stringify({
                         timestamp: info.timestamp,
                         level: info.level,
@@ -62,7 +64,6 @@ class LogManager {
                 })
             ]
         });
-        
         return logger;
     }
 
@@ -71,7 +72,7 @@ class LogManager {
             fs.mkdirSync(this.logDirectory, { recursive: true });
         }
     }
-    
+
     getLogFilePath() {
         return path.join(this.logDirectory, this.config.logFile);
     }
@@ -82,28 +83,38 @@ class LogManager {
 
     startFileLogging() {
         const logPath = this.getLogFilePath();
-        
-        // Check if log file exists, if not create it
         if (!fs.existsSync(logPath)) {
             fs.writeFileSync(logPath, '', 'utf-8');
             console.log(`Created log file: ${logPath}`);
         }
-
         if (this.fileTransport) {
             this.logger.remove(this.fileTransport);
         }
-
         this.fileTransport = new winston.transports.File({
             filename: logPath,
             level: 'info',
             maxsize: 10485760, // 10MB
             maxFiles: 10,
+            format: winston.format.combine(
+                winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+                winston.format.errors({ stack: true }),
+                winston.format.printf(info => {
+                    if (info.structured) {
+                        return `[${info.timestamp}] ${info.message}`;
+                    } else {
+                        return JSON.stringify({
+                            timestamp: info.timestamp,
+                            level: info.level,
+                            message: info.message,
+                            service: info.service,
+                            ...info
+                        });
+                    }
+                })
+            )
         });
-
         this.logger.add(this.fileTransport);
         this.config.isLogging = true;
-        
-        // Only log this if it's a manual start (not initial startup)
         if (this.hasStartedBefore) {
             this.logStructured(`File logging started. Outputting to ${this.config.logFile}`);
         }
@@ -118,17 +129,15 @@ class LogManager {
         }
         this.config.isLogging = false;
     }
-    
+
     updateConfig(newConfig) {
         const oldLogFile = this.config.logFile;
-        
         if (newConfig.logFile && newConfig.logFile !== this.config.logFile) {
             this.config.logFile = newConfig.logFile;
             this.logStructured(`Log file changed from ${oldLogFile} to ${this.config.logFile}`);
         }
-        
         if (this.config.isLogging) {
-            this.startFileLogging(); // Restart logging with new config
+            this.startFileLogging();
         }
     }
 
@@ -150,122 +159,130 @@ class LogManager {
         return 'Log file is empty or does not exist.';
     }
 
-    // Enhanced logging methods for specific activities
+    // ============================================================================
+    // LIBRARY LOADS AND SERVER EVENTS
+    // ============================================================================
+    logLibraryLoad(libraryName, version = 'unknown') {
+        this.logStructured(`LIBRARY LOAD: ${libraryName} v${version}`);
+    }
+
+    logServerStart(port = 3002) {
+        this.logStructured('\n********************************************************************************');
+        this.logStructured('SERVER START: PingOne User Management Server');
+        this.logStructured(`PORT: ${port}`);
+        this.logStructured('********************************************************************************\n');
+    }
+
+    logServerStop() {
+        this.logStructured('\n********************************************************************************');
+        this.logStructured('SERVER STOP: PingOne User Management Server');
+        this.logStructured('********************************************************************************\n');
+    }
+
+    // ============================================================================
+    // TOKEN MANAGEMENT
+    // ============================================================================
     logWorkerTokenRequested() {
-        this.logStructured('\n*** TOKEN EVENT ***');
-        this.logStructured('Requested worker token');
+        this.logStructured('\n********************************************************************************');
+        this.logStructured('TOKEN EVENT: Requested worker token');
     }
 
     logWorkerTokenReceived(expiresInMinutes = 55) {
-        this.logStructured('Worker token received (expires in ' + expiresInMinutes + ' minutes) ✅');
-        this.logStructured('********************\n');
+        this.logStructured(`TOKEN EVENT: Worker token received (expires in ${expiresInMinutes} minutes) ✅`);
+        this.logStructured('********************************************************************************\n');
     }
 
     logWorkerTokenFailed() {
-        this.logStructured('Worker token request failed ❌');
-        this.logStructured('********************\n');
+        this.logStructured('TOKEN EVENT: Worker token request failed ❌');
+        this.logStructured('********************************************************************************\n');
     }
 
     logWorkerTokenReused(timeRemaining) {
-        this.logStructured('Worker token reused from cache (' + timeRemaining + ' remaining).');
-        this.logStructured('********************\n');
+        this.logStructured(`TOKEN EVENT: Worker token reused from cache (${timeRemaining} remaining)`);
+        this.logStructured('********************************************************************************\n');
     }
 
+    // ============================================================================
+    // OPERATION SECTIONS
+    // ============================================================================
     logFileSelected(filename, recordCount) {
-        this.logStructured(`Selected file: ${filename} (${recordCount} records)`);
+        this.logStructured(`FILE SELECTED: ${filename} (${recordCount} records)`);
     }
 
     logActionStarted(action, recordCount = null) {
-        // Add operation start separator
-        this.logStructured(`\n===== ${action.toUpperCase()} OPERATION START =====`);
+        this.logStructured('\n********************************************************************************');
+        this.logStructured(`${action.toUpperCase()} OPERATION START`);
         if (recordCount) {
-            this.logStructured(`${action} started – action: ${action} (${recordCount} records)`);
-        } else {
-            this.logStructured(`${action} started – action: ${action}`);
+            this.logStructured(`RECORDS TO PROCESS: ${recordCount}`);
         }
+        this.logStructured('********************************************************************************');
     }
 
     logActionComplete(action, successCount, skippedCount = 0, failedCount = 0) {
-        // Add operation end separator
-        let message = `Action complete – ${action}: ${successCount}`;
-        if (skippedCount > 0) message += `, Skipped: ${skippedCount}`;
-        if (failedCount > 0) message += `, Failed: ${failedCount}`;
-        message += ' ✅';
-        this.logStructured(message);
-        this.logStructured(`===== ${action.toUpperCase()} OPERATION END =====\n`);
+        this.logStructured('********************************************************************************');
+        this.logStructured(`${action.toUpperCase()} OPERATION COMPLETE`);
+        this.logStructured(`RESULTS: Success=${successCount}, Skipped=${skippedCount}, Failed=${failedCount}`);
+        this.logStructured('********************************************************************************\n');
     }
 
     logImportOperation(successCount, totalCount, duration) {
-        this.logStructured('**** TOTALS (IMPORT) ****');
-        this.logStructured(`IMPORT OPERATION COMPLETE: ${successCount}/${totalCount} users imported successfully in ${duration}ms`);
-        this.info('Import operation summary', {
-            totalRecords: totalCount,
-            successful: successCount,
-            failed: totalCount - successCount,
-            skipped: 0,
-            duration: `${duration}ms`,
-            successRate: `${Math.round((successCount / totalCount) * 100)}%`
-        });
-        this.logStructured('**************************\n');
+        this.logStructured('\n********************************************************************************');
+        this.logStructured('IMPORT OPERATION SUMMARY');
+        this.logStructured(`TOTAL RECORDS: ${totalCount}`);
+        this.logStructured(`SUCCESSFUL: ${successCount}`);
+        this.logStructured(`FAILED: ${totalCount - successCount}`);
+        this.logStructured(`DURATION: ${duration}ms`);
+        this.logStructured(`SUCCESS RATE: ${Math.round((successCount / totalCount) * 100)}%`);
+        this.logStructured('********************************************************************************\n');
     }
 
     logModifyOperation(successCount, totalCount, duration) {
-        this.logStructured('**** TOTALS (MODIFY) ****');
-        this.logStructured(`MODIFY OPERATION COMPLETE: ${successCount}/${totalCount} users modified successfully in ${duration}ms`);
-        this.info('Modify operation summary', {
-            totalRecords: totalCount,
-            successful: successCount,
-            failed: totalCount - successCount,
-            skipped: 0,
-            duration: `${duration}ms`,
-            successRate: `${Math.round((successCount / totalCount) * 100)}%`
-        });
-        this.logStructured('**************************\n');
+        this.logStructured('\n********************************************************************************');
+        this.logStructured('MODIFY OPERATION SUMMARY');
+        this.logStructured(`TOTAL RECORDS: ${totalCount}`);
+        this.logStructured(`SUCCESSFUL: ${successCount}`);
+        this.logStructured(`FAILED: ${totalCount - successCount}`);
+        this.logStructured(`DURATION: ${duration}ms`);
+        this.logStructured(`SUCCESS RATE: ${Math.round((successCount / totalCount) * 100)}%`);
+        this.logStructured('********************************************************************************\n');
     }
 
     logDeleteOperation(successCount, totalCount, notFoundCount = 0, duration) {
-        this.logStructured('**** TOTALS (DELETE) ****');
-        this.logStructured(`DELETE OPERATION COMPLETE: ${successCount}/${totalCount} users deleted successfully in ${duration}ms`);
-        this.info('Delete operation summary', {
-            totalRecords: totalCount,
-            successful: successCount,
-            failed: totalCount - successCount - notFoundCount,
-            notFound: notFoundCount,
-            skipped: 0,
-            duration: `${duration}ms`,
-            successRate: `${Math.round((successCount / totalCount) * 100)}%`
-        });
-        this.logStructured('**************************\n');
+        this.logStructured('\n********************************************************************************');
+        this.logStructured('DELETE OPERATION SUMMARY');
+        this.logStructured(`TOTAL RECORDS: ${totalCount}`);
+        this.logStructured(`SUCCESSFUL: ${successCount}`);
+        this.logStructured(`NOT FOUND: ${notFoundCount}`);
+        this.logStructured(`FAILED: ${totalCount - successCount - notFoundCount}`);
+        this.logStructured(`DURATION: ${duration}ms`);
+        this.logStructured(`SUCCESS RATE: ${Math.round((successCount / totalCount) * 100)}%`);
+        this.logStructured('********************************************************************************\n');
     }
 
+    // ============================================================================
+    // INDIVIDUAL API CALLS (ONE LINE EACH)
+    // ============================================================================
     logUserAction(action, details) {
         const { username, userId, status, message } = details;
-        const identifier = username || userId || 'unknown';
-        this.logStructured(`${action} user ${identifier}: ${status} - ${message || 'No message'}`);
+        const user = username || userId || 'unknown';
+        this.logStructured(`API CALL [${action.toUpperCase()}]: ${user} - ${status} - ${message}`);
     }
 
     logBulkProgress(processed, total, action = 'Processing') {
-        this.logStructured(`${action} progress: ${processed}/${total} completed`);
+        const percentage = Math.round((processed / total) * 100);
+        this.logStructured(`PROGRESS [${action}]: ${processed}/${total} (${percentage}%)`);
     }
 
-    // Client error logging
     logClientError(logEntry) {
-        try {
-            if (logEntry.structured) {
-                this.logStructured(logEntry.message);
-            } else {
-                this.logger.info(logEntry.message, {
-                    source: 'client',
-                    data: logEntry.data,
-                    timestamp: logEntry.timestamp
-                });
-            }
-        } catch (error) {
-            this.logger.error('Failed to log client message', { error: error.message });
+        this.logStructured(`CLIENT ERROR: ${logEntry.message}`);
+        if (logEntry.data) {
+            this.logStructured(`ERROR DETAILS: ${JSON.stringify(logEntry.data)}`);
         }
     }
 
-    // Standard logging methods
+    // ============================================================================
+    // STANDARD LOGGING METHODS
+    // ============================================================================
     log(level, message, meta = {}) {
         this.logger.log(level, message, meta);
     }

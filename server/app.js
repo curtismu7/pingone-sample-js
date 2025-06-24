@@ -1,139 +1,68 @@
+// Load environment variables
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const logger = require('morgan');
 const logManager = require('./utils/logManager');
-const logger = logManager.logger; // Use the logger from the manager
 
-// Import routes
-const tokenRouter = require('./routes/token').router;
+// Import routers
 const importRouter = require('./routes/import');
-const modifyRouter = require('./routes/modify');
-const deleteRouter = require('./routes/delete');
-const logsRouter = require('./routes/logs'); // Import the new logs router
+const tokenRouter = require('./routes/token');
 
 const app = express();
-const PORT = process.env.PORT || 3002;
 
 // Middleware
-app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-        ? ['https://yourdomain.com'] 
-        : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001', 'http://127.0.0.1:3002'],
-    credentials: true
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(logger('dev'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(cors());
 
-// Request logging middleware - custom implementation
-app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        logger.info('HTTP Request', {
-            method: req.method,
-            url: req.originalUrl,
-            statusCode: res.statusCode,
-            duration: `${duration}ms`,
-            ip: req.ip
-        });
-    });
-    next();
+// Serve static files from the public directory
+const publicPath = path.resolve(__dirname, '../public');
+console.log('Serving static files from:', publicPath);
+
+// Log directory contents
+fs.readdir(publicPath, (err, files) => {
+    if (err) {
+        console.error('Error reading public directory:', err);
+    } else {
+        console.log('Public directory contents:', files);
+    }
 });
 
-// Serve static files from public directory
-const publicPath = path.join(__dirname, '../public');
 app.use(express.static(publicPath));
 
-// API Routes
-app.use('/api/token', tokenRouter);
+// API routes
 app.use('/api/import', importRouter);
-app.use('/api/modify', modifyRouter);
-app.use('/api/delete', deleteRouter);
-app.use('/api/logs', logsRouter); // Register the new logs router
+app.use('/api/token', tokenRouter.router);
 
-// Logging endpoint for client-side errors
-app.post('/api/log', (req, res) => {
-    try {
-        logManager.logClientError(req.body);
-        res.json({ success: true });
-    } catch (error) {
-        logger.error('Failed to log client error', { error: error.message });
-        res.status(500).json({ error: 'Failed to log error' });
-    }
-});
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-    const healthInfo = {
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        version: require('../package.json').version
-    };
-    logger.info('Health check requested.', healthInfo);
-    res.json(healthInfo);
-});
-
-// Serve main pages
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-app.get('/settings', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/settings.html'));
-});
-
-// Catch-all route should be last
+// Handle SPA routing - serve index.html for any other GET requests
 app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api/')) {
-        res.sendFile(path.join(__dirname, '../public/index.html'));
+    const indexPath = path.join(publicPath, 'index.html');
+    console.log('Attempting to serve:', indexPath);
+    
+    if (fs.existsSync(indexPath)) {
+        console.log('File exists, sending...');
+        res.sendFile(indexPath);
     } else {
-        res.status(404).json({ error: 'API endpoint not found' });
+        console.error('File does not exist:', indexPath);
+        res.status(404).send('File not found');
     }
 });
 
-// Error handling middleware
-app.use((error, req, res, next) => {
-    logger.error('Unhandled server error', {
-        error: error.message,
-        stack: error.stack,
-        url: req.originalUrl
-    });
-    res.status(500).json({ error: 'Internal Server Error' });
+// Error handling
+app.use((err, req, res, next) => {
+    console.error('Error:', err.stack);
+    res.status(500).send('Something broke!');
 });
 
-// Start server
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    // Log server startup and configuration details
-    logManager.logStructured('\n********** SERVER STARTUP **********');
-    logManager.logStructured(`Server listening on port ${PORT}`);
-    logManager.logStructured('Loaded libraries: Express, CORS, Multer, PapaParse, Axios, Winston');
-    logManager.logStructured('************************************\n');
-
-    console.log(`🚀 Ping Identity User Management Server running on http://localhost:${PORT}`);
-    console.log(`📁 Static files served from: ${publicPath}`);
-    console.log(`🌐 API endpoints available at: http://localhost:${PORT}/api`);
+    console.log(`Server is running on port ${PORT}`);
+    console.log('Environment:', process.env.NODE_ENV || 'development');
 });
 
-// Graceful shutdown
-const shutdown = (signal) => {
-    logger.info(`${signal} received, shutting down gracefully.`);
-    logManager.stopFileLogging();
-    process.exit(0);
-};
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
-
-// Exception handlers
-process.on('uncaughtException', (error) => {
-    logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
-    console.error('Uncaught Exception:', error.stack || error);
-    process.exit(1);
-});
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection', { reason });
-    console.error('Unhandled Rejection:', reason && reason.stack ? reason.stack : reason);
-    process.exit(1);
-});
-
-module.exports = app; 
+module.exports = app;
