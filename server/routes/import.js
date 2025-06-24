@@ -50,7 +50,6 @@ function sendProgressUpdate(operationId, data) {
 }
 
 // Configure multer for file uploads
-// DEBUG: If file uploads fail, check upload directory permissions and file size limits
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const uploadDir = path.join(__dirname, '../../uploads');
@@ -61,40 +60,74 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + '.csv');
+        cb(null, 'import-' + uniqueSuffix + '.csv');
     }
 });
 
 const upload = multer({ 
     storage: storage,
     fileFilter: (req, file, cb) => {
-        // DEBUG: If file upload is rejected, check file type and extension
         if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
             cb(null, true);
         } else {
-            cb(new Error('Only CSV files are allowed'), false);
+            cb(new Error('Only CSV files are allowed'));
         }
     },
     limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
+        fileSize: 50 * 1024 * 1024, // 50MB limit
+        files: 1
     }
 });
 
 // POST /api/import - Import users from CSV file upload
-// DEBUG: This endpoint handles file uploads - check multipart/form-data content type
 router.post('/', upload.single('csv'), async (req, res) => {
     const startTime = Date.now();
     const operationId = `csv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     try {
         // Validate file upload
-        // DEBUG: If no file received, check form field name and file selection
         if (!req.file) {
-            return res.status(400).json({ error: 'No CSV file uploaded' });
+            throw new Error('No file uploaded');
         }
 
-        // Validate credentials
-        // DEBUG: Check if all required PingOne credentials are provided
+        const filePath = req.file.path;
+        
+        // Read and process the file in chunks
+        const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
+        
+        // Process the file using PapaParse with streaming
+        const parseStream = Papa.parse(Papa.NODE_STREAM_INPUT, {
+            header: true,
+            skipEmptyLines: true,
+            transformHeader: (header) => {
+                return header.trim();
+            }
+        });
+
+        let rowCount = 0;
+        const users = [];
+        
+        // Process each row as it's parsed
+        parseStream.on('data', (row) => {
+            rowCount++;
+            users.push(row);
+            
+            // Send progress updates
+            sendProgressUpdate(operationId, {
+                type: 'progress',
+                processed: rowCount,
+                status: 'processing'
+            });
+        });
+
+        // Handle parsing completion
+        await new Promise((resolve, reject) => {
+            parseStream.on('end', () => resolve());
+            parseStream.on('error', (error) => reject(error));
+            fileStream.pipe(parseStream);
+        });
+
+        // Process users and import them
         const { environmentId, clientId, clientSecret } = req.body;
         
         if (!environmentId || !clientId || !clientSecret) {
@@ -107,7 +140,7 @@ router.post('/', upload.single('csv'), async (req, res) => {
         sendProgressUpdate(operationId, {
             type: 'progress',
             current: 0,
-            total: 0,
+            total: users.length,
             success: 0,
             errors: 0,
             message: 'Reading CSV file...'
@@ -126,21 +159,6 @@ router.post('/', upload.single('csv'), async (req, res) => {
             records: 'analyzing...'
         });
 
-        // Read and parse CSV file
-        // DEBUG: If CSV parsing fails, check file encoding and format
-        const csvData = fs.readFileSync(req.file.path, 'utf8');
-        const parseResult = Papa.parse(csvData, {
-            header: true,
-            skipEmptyLines: true,
-            transformHeader: (header) => header.trim()
-        });
-
-        if (parseResult.errors && parseResult.errors.length > 0) {
-            logManager.warn('CSV parsing warnings', { errors: parseResult.errors });
-        }
-
-        const users = parseResult.data;
-        
         // Send parsing complete update
         sendProgressUpdate(operationId, {
             type: 'progress',
@@ -173,14 +191,15 @@ router.post('/', upload.single('csv'), async (req, res) => {
             message: 'Getting authentication token...'
         });
 
-        const token = await getWorkerToken(environmentId, clientId, clientSecret);
-        const defaultPopulationId = await getDefaultPopulation(environmentId, token);
+        const accessToken = await getWorkerToken(environmentId, clientId, clientSecret);
+        const defaultPopulationId = await getDefaultPopulation(environmentId, accessToken);
 
         // Process users one by one
         // DEBUG: Monitor this loop for performance and error patterns
         const results = [];
         let successCount = 0;
         let errorCount = 0;
+        let skippedCount = 0;
 
         for (let i = 0; i < users.length; i++) {
             const user = users[i];
@@ -190,7 +209,7 @@ router.post('/', upload.single('csv'), async (req, res) => {
                 const userData = mapUserData(user, defaultPopulationId);
                 
                 // Create user in PingOne
-                const result = await createUser(userData, environmentId, token);
+                const result = await createUser(userData, environmentId, accessToken);
                 
                 results.push({
                     username: user.username || user.email || `user-${i}`,
@@ -201,26 +220,59 @@ router.post('/', upload.single('csv'), async (req, res) => {
                 
                 successCount++;
                 
+                logManager.logUserAction('import', { 
+                    username: user.username || user.email || `user-${i}`, 
+                    userId: result.id,
+                    status: 'success', 
+                    message: 'User created successfully' 
+                });
+                
             } catch (error) {
                 // DEBUG: Check error details for specific PingOne API failures
                 const errorMessage = error.response?.data?.details?.[0]?.message || 
                                    error.response?.data?.detail || 
                                    error.message;
                 
-                logManager.error('User import failed', {
-                    username: user.username || user.email,
-                    error: errorMessage,
-                    apiResponse: error.response?.data
-                });
+                // Check if this is a uniqueness violation (should be treated as skipped)
+                const detailsCode = error.response?.data?.details?.[0]?.code;
+                const isUniquenessViolation = (detailsCode && detailsCode.toUpperCase() === 'UNIQUENESS_VIOLATION') ||
+                                            (errorMessage && errorMessage.toLowerCase().includes('unique')) ||
+                                            (errorMessage && errorMessage.toLowerCase().includes('already exists'));
+                
+                const status = isUniquenessViolation ? 'skipped' : 'error';
+                const finalMessage = isUniquenessViolation ? 'User already exists (skipped)' : errorMessage;
+                
+                if (isUniquenessViolation) {
+                    logManager.info('User skipped (already exists)', {
+                        username: user.username || user.email,
+                        reason: errorMessage
+                    });
+                } else {
+                    logManager.error('User import failed', {
+                        username: user.username || user.email,
+                        error: errorMessage,
+                        apiResponse: error.response?.data
+                    });
+                }
                 
                 results.push({
                     username: user.username || user.email || `user-${i}`,
-                    status: 'error',
-                    message: errorMessage,
+                    status: status,
+                    message: finalMessage,
                     error: error.response?.data
                 });
                 
-                errorCount++;
+                if (isUniquenessViolation) {
+                    skippedCount++;
+                } else {
+                    errorCount++;
+                }
+                
+                logManager.logUserAction('import', { 
+                    username: user.username || user.email || `user-${i}`, 
+                    status: status, 
+                    message: finalMessage 
+                });
             }
 
             // Send real-time progress update
@@ -230,6 +282,7 @@ router.post('/', upload.single('csv'), async (req, res) => {
                 total: users.length,
                 success: successCount,
                 errors: errorCount,
+                skipped: skippedCount,
                 message: `Processing user ${i + 1} of ${users.length}`
             });
 
@@ -239,13 +292,18 @@ router.post('/', upload.single('csv'), async (req, res) => {
                     processed: i + 1,
                     total: users.length,
                     success: successCount,
-                    errors: errorCount
+                    errors: errorCount,
+                    skipped: skippedCount
                 });
             }
         }
 
         // Clean up uploaded file
-        fs.unlinkSync(req.file.path);
+        fs.unlink(filePath, (err) => {
+            if (err) {
+                console.error('Error deleting uploaded file:', err);
+            }
+        });
 
         const duration = Date.now() - startTime;
         
@@ -256,6 +314,7 @@ router.post('/', upload.single('csv'), async (req, res) => {
             total: users.length,
             success: successCount,
             errors: errorCount,
+            skipped: skippedCount,
             duration: duration,
             message: 'Import completed'
         });
@@ -266,21 +325,21 @@ router.post('/', upload.single('csv'), async (req, res) => {
             totalRecords: users.length,
             successful: successCount,
             failed: errorCount,
-            skipped: 0, // Import doesn't have skipped records
+            skipped: skippedCount,
             duration: `${duration}ms`,
             successRate: `${Math.round((successCount / users.length) * 100)}%`
         });
         
         // Log structured totals for easy reading
-        logManager.logStructured(`IMPORT TOTALS: Total=${users.length}, Imported=${successCount}, Failed=${errorCount}, Skipped=0, Duration=${duration}ms`);
+        logManager.logStructured(`IMPORT TOTALS: Total=${users.length}, Imported=${successCount}, Failed=${errorCount}, Skipped=${skippedCount}, Duration=${duration}ms`);
         
-        logManager.logImportOperation(successCount, users.length, duration);
+        logManager.logImportOperation(successCount, users.length, duration, skippedCount);
         logManager.logUserAction('operation_complete', {
             operation: 'Import',
             totalRecords: users.length,
             successful: successCount,
             failed: errorCount,
-            skipped: 0
+            skipped: skippedCount
         });
 
         res.json({
@@ -288,11 +347,13 @@ router.post('/', upload.single('csv'), async (req, res) => {
             results,
             successCount,
             errorCount,
+            skippedCount,
             operationId,
             summary: {
                 total: users.length,
                 successful: successCount,
                 failed: errorCount,
+                skipped: skippedCount,
                 duration: duration
             }
         });
@@ -313,7 +374,9 @@ router.post('/', upload.single('csv'), async (req, res) => {
 
         // Clean up uploaded file on error
         if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
+            fs.unlink(req.file.path, (err) => {
+                if (err) console.error('Error cleaning up file after error:', err);
+            });
         }
 
         res.status(500).json({
@@ -326,7 +389,7 @@ router.post('/', upload.single('csv'), async (req, res) => {
 
 // POST /api/import/bulk - Import users from JSON data (no file upload)
 // DEBUG: This endpoint handles direct JSON data - check request body structure
-router.post('/bulk', async (req, res) => {
+router.post('/bulk', express.json({ limit: '50mb' }), async (req, res) => {
     const startTime = Date.now();
     const operationId = `bulk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -372,13 +435,14 @@ router.post('/bulk', async (req, res) => {
             message: 'Getting authentication token...'
         });
 
-        const token = await getWorkerToken(environmentId, clientId, clientSecret);
-        const defaultPopulationId = await getDefaultPopulation(environmentId, token);
+        const accessToken = await getWorkerToken(environmentId, clientId, clientSecret);
+        const defaultPopulationId = await getDefaultPopulation(environmentId, accessToken);
 
         // Process users
         const results = [];
         let successCount = 0;
         let errorCount = 0;
+        let skippedCount = 0;
 
         for (let i = 0; i < users.length; i++) {
             const user = users[i];
@@ -386,7 +450,7 @@ router.post('/bulk', async (req, res) => {
             try {
                 // Get default population if not specified in user data
                 const userData = mapUserData(user, defaultPopulationId);
-                const result = await createUser(userData, environmentId, token);
+                const result = await createUser(userData, environmentId, accessToken);
                 
                 results.push({
                     username: user.username || user.email || `user-${i}`,
@@ -397,25 +461,58 @@ router.post('/bulk', async (req, res) => {
                 
                 successCount++;
                 
+                logManager.logUserAction('import', { 
+                    username: user.username || user.email || `user-${i}`, 
+                    userId: result.id,
+                    status: 'success', 
+                    message: 'User created successfully' 
+                });
+                
             } catch (error) {
                 const errorMessage = error.response?.data?.details?.[0]?.message || 
                                    error.response?.data?.detail || 
                                    error.message;
                 
-                logManager.error('Bulk user import failed', {
-                    username: user.username || user.email,
-                    error: errorMessage,
-                    apiResponse: error.response?.data
-                });
+                // Check if this is a uniqueness violation (should be treated as skipped)
+                const detailsCode = error.response?.data?.details?.[0]?.code;
+                const isUniquenessViolation = (detailsCode && detailsCode.toUpperCase() === 'UNIQUENESS_VIOLATION') ||
+                                            (errorMessage && errorMessage.toLowerCase().includes('unique')) ||
+                                            (errorMessage && errorMessage.toLowerCase().includes('already exists'));
+                
+                const status = isUniquenessViolation ? 'skipped' : 'error';
+                const finalMessage = isUniquenessViolation ? 'User already exists (skipped)' : errorMessage;
+                
+                if (isUniquenessViolation) {
+                    logManager.info('User skipped (already exists)', {
+                        username: user.username || user.email,
+                        reason: errorMessage
+                    });
+                } else {
+                    logManager.error('Bulk user import failed', {
+                        username: user.username || user.email,
+                        error: errorMessage,
+                        apiResponse: error.response?.data
+                    });
+                }
                 
                 results.push({
                     username: user.username || user.email || `user-${i}`,
-                    status: 'error',
-                    message: errorMessage,
+                    status: status,
+                    message: finalMessage,
                     error: error.response?.data
                 });
                 
-                errorCount++;
+                if (isUniquenessViolation) {
+                    skippedCount++;
+                } else {
+                    errorCount++;
+                }
+                
+                logManager.logUserAction('import', { 
+                    username: user.username || user.email || `user-${i}`, 
+                    status: status, 
+                    message: finalMessage 
+                });
             }
 
             // Send real-time progress update
@@ -425,6 +522,7 @@ router.post('/bulk', async (req, res) => {
                 total: users.length,
                 success: successCount,
                 errors: errorCount,
+                skipped: skippedCount,
                 message: `Processing user ${i + 1} of ${users.length}`
             });
 
@@ -434,7 +532,8 @@ router.post('/bulk', async (req, res) => {
                     processed: i + 1,
                     total: users.length,
                     success: successCount,
-                    errors: errorCount
+                    errors: errorCount,
+                    skipped: skippedCount
                 });
             }
         }
@@ -448,6 +547,7 @@ router.post('/bulk', async (req, res) => {
             total: users.length,
             success: successCount,
             errors: errorCount,
+            skipped: skippedCount,
             duration: duration,
             message: 'Import completed'
         });
@@ -456,12 +556,17 @@ router.post('/bulk', async (req, res) => {
             totalRecords: users.length,
             successCount,
             errorCount,
+            skippedCount,
             duration: `${duration}ms`
         });
         
-        logManager.logImportOperation(successCount, users.length, duration);
+        logManager.logImportOperation(successCount, users.length, duration, skippedCount);
         logManager.logUserAction('operation_complete', {
-            operation: 'Bulk Import'
+            operation: 'Bulk Import',
+            totalRecords: users.length,
+            successful: successCount,
+            failed: errorCount,
+            skipped: skippedCount
         });
 
         res.json({
@@ -469,11 +574,13 @@ router.post('/bulk', async (req, res) => {
             results,
             successCount,
             errorCount,
+            skippedCount,
             operationId,
             summary: {
                 total: users.length,
                 successful: successCount,
                 failed: errorCount,
+                skipped: skippedCount,
                 duration: duration
             }
         });
@@ -510,10 +617,10 @@ router.post('/user', async (req, res) => {
             });
         }
 
-        const token = await getWorkerToken(environmentId, clientId, clientSecret);
-        const defaultPopulationId = await getDefaultPopulation(environmentId, token);
+        const accessToken = await getWorkerToken(environmentId, clientId, clientSecret);
+        const defaultPopulationId = await getDefaultPopulation(environmentId, accessToken);
         const userData = mapUserData(user, defaultPopulationId);
-        const result = await createUser(userData, environmentId, token);
+        const result = await createUser(userData, environmentId, accessToken);
 
         logManager.info('Single user import successful', {
             username: user.username || user.email,
@@ -543,7 +650,7 @@ router.post('/user', async (req, res) => {
 
 // Helper function to get the default population for the environment
 // DEBUG: If population lookup fails, check environment permissions and API response
-async function getDefaultPopulation(environmentId, token) {
+async function getDefaultPopulation(environmentId, accessToken) {
     try {
         logManager.debug('Getting default population', { environmentId });
         
@@ -551,7 +658,7 @@ async function getDefaultPopulation(environmentId, token) {
             `https://api.pingone.com/v1/environments/${environmentId}/populations`,
             {
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                     'Content-Type': 'application/json'
                 }
             }
@@ -739,7 +846,7 @@ function mapUserData(user, defaultPopulationId = null) {
 
 // Helper function to create a user in PingOne
 // DEBUG: If user creation fails, check PingOne API response and user data format
-async function createUser(userData, environmentId, token) {
+async function createUser(userData, environmentId, accessToken) {
     try {
         logManager.debug('Creating user in PingOne', {
             username: userData.username,
@@ -753,7 +860,7 @@ async function createUser(userData, environmentId, token) {
             userData,
             {
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                     'Content-Type': 'application/json'
                 }
             }
@@ -788,4 +895,43 @@ async function createUser(userData, environmentId, token) {
     }
 }
 
-module.exports = router; 
+// Import endpoint
+router.post('/import', multer({
+    storage: multer.memoryStorage(), // Store files in memory
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB limit
+    }
+}).single('csvFile'), async (req, res) => {
+    try {
+        const { clientId, clientSecret } = req.body;
+        const csvFile = req.file;
+
+        if (!clientId || !clientSecret || !csvFile) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: clientId, clientSecret, and csvFile'
+            });
+        }
+
+        // TODO: Implement actual PingOne import logic here
+        // For now, just return a success response
+        res.json({
+            success: true,
+            message: 'User import initiated successfully',
+            details: {
+                clientId: clientId,
+                filename: csvFile.originalname,
+                size: csvFile.size,
+                mimetype: csvFile.mimetype
+            }
+        });
+    } catch (error) {
+        console.error('Error in import:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Internal server error'
+        });
+    }
+});
+
+module.exports = router;

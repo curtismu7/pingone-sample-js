@@ -10,7 +10,7 @@ const router = express.Router();
 
 // Token cache to avoid unnecessary API calls
 // DEBUG: Check tokenCache in memory for current token status
-let tokenCache = {};
+exports.tokenCache = {};
 
 // Token configuration
 const TOKEN_CONFIG = {
@@ -80,7 +80,7 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
     const now = Date.now();
     
     // Check cache first
-    const cached = tokenCache[cacheKey];
+    const cached = exports.tokenCache[cacheKey];
     if (cached && isTokenValid(cached)) {
         // Log detailed token age information
         logTokenAgeInfo(cached, 'reused');
@@ -90,110 +90,56 @@ const getWorkerToken = async (environmentId, clientId, clientSecret) => {
         logManager.logWorkerTokenReused(`${timeRemaining} mins`);
         return cached.access_token;
     }
-    
-    logManager.info('TOKEN REQUEST - Getting new worker token', { 
-        environmentId, 
-        clientId,
-        reason: cached ? 'token expired' : 'no cached token',
-        cacheDuration: `${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`
-    });
-    logManager.logStructured('TOKEN REQUEST: Getting new worker token');
-    logManager.logWorkerTokenRequested();
 
-    // Construct the correct token endpoint URL
-    const tokenUrl = `https://auth.pingone.com/${environmentId}/as/token`;
-    
-    // Create the authorization header
-    const authString = `${clientId}:${clientSecret}`;
-    const authHeader = `Basic ${Buffer.from(authString).toString('base64')}`;
-    
-    logManager.info('Token request details', {
-        url: tokenUrl,
-        environmentId: environmentId.substring(0, 8) + '...',
-        clientId: clientId.substring(0, 8) + '...',
-        authHeaderLength: authHeader.length,
-        hasClientSecret: !!clientSecret && clientSecret.length > 0
-    });
-    
+    // If no valid cached token, get a new one
     try {
-        const response = await axios.post(
-            tokenUrl,
+        logManager.logStructured('TOKEN REQUEST: Fetching new token');
+        
+        const tokenResponse = await axios.post(
+            `https://auth.pingone.com/${environmentId}/as/token`,
             new URLSearchParams({
-                'grant_type': 'client_credentials'
+                grant_type: 'client_credentials',
+                client_id: clientId,
+                client_secret: clientSecret
             }),
             {
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': authHeader
-                },
-                timeout: 10000 // 10 second timeout
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
             }
         );
-        
-        if (response.data && response.data.access_token) {
-            // Cache token for 50 minutes (as requested)
-            const expiresAt = now + TOKEN_CONFIG.CACHE_DURATION;
-            const tokenData = {
-                access_token: response.data.access_token,
-                token_type: response.data.token_type,
-                expiresAt: expiresAt,
-                environmentId,
-                clientId,
-                createdAt: now
-            };
-            
-            tokenCache[cacheKey] = tokenData;
-            
-            // Log detailed token creation information
-            logManager.info('TOKEN CREATED - Worker token obtained and cached', { 
-                environmentId, 
-                clientId,
-                expiresAt: new Date(expiresAt).toISOString(),
-                tokenType: response.data.token_type,
-                scope: response.data.scope,
-                cacheDuration: `${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`,
-                bufferTime: `${TOKEN_CONFIG.BUFFER_TIME / (60 * 1000)} minutes`
-            });
-            
-            // Log in simple format for easy reading
-            logManager.logStructured(`TOKEN CREATED: Cached for ${TOKEN_CONFIG.CACHE_DURATION / (60 * 1000)} minutes`);
-            
-            // Log initial age info (0 minutes old)
-            logTokenAgeInfo(tokenData, 'created');
-            
-            logManager.logWorkerTokenReceived(50);
-            
-            return response.data.access_token;
-        } else {
-            throw new Error('Invalid token response from PingOne');
-        }
-    } catch (error) {
-        logManager.error('Failed to get worker token from PingOne', {
-            environmentId,
-            clientId,
-            url: tokenUrl,
-            error: error.message,
-            statusCode: error.response?.status,
-            statusText: error.response?.statusText,
-            response: error.response?.data,
-            headers: error.response?.headers,
-            requestHeaders: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': 'Basic [REDACTED]'
-            }
-        });
-        
-        logManager.logWorkerTokenFailed();
 
-        // Re-throw a more specific error
-        if (error.response) {
-            const { status, data } = error.response;
-            throw new Error(`PingOne API error (${status}): ${JSON.stringify(data)}`);
-        } else {
-            throw new Error(`Failed to communicate with PingOne API: ${error.message}`);
-        }
+        const { access_token, expires_in } = tokenResponse.data;
+        const expiresAt = now + (expires_in * 1000);
+        
+        // Cache the new token
+        exports.tokenCache[cacheKey] = {
+            access_token,
+            expiresAt,
+            createdAt: now,
+            environmentId,
+            clientId
+        };
+
+        // Log token age info
+        logTokenAgeInfo(exports.tokenCache[cacheKey], 'created');
+        
+        logManager.logStructured('TOKEN CREATED: New token obtained and cached');
+        logManager.logWorkerTokenCreated();
+        
+        return access_token;
+    } catch (error) {
+        logManager.error('TOKEN ERROR: Failed to get worker token', {
+            error: error.message,
+            environmentId: environmentId.substring(0, 8) + '...',
+            clientId: clientId.substring(0, 8) + '...'
+        });
+        throw error;
     }
 };
+
+// Export the function
+exports.getWorkerToken = getWorkerToken;
 
 const getUserIdByUsername = async (username, environmentId, token) => {
     const url = `https://api.pingone.com/v1/environments/${environmentId}/users?filter=username eq "${username}"`;
@@ -319,7 +265,7 @@ router.get('/status', (req, res) => {
     }
     
     const cacheKey = createCacheKey(environmentId, clientId);
-    const cached = tokenCache[cacheKey];
+    const cached = exports.tokenCache[cacheKey];
     const now = Date.now();
     
     if (cached && isTokenValid(cached)) {
@@ -363,31 +309,7 @@ router.post('/test', async (req, res) => {
         // Validate required fields
         if (!environmentId || !clientId || !clientSecret) {
             return res.status(400).json({
-                error: 'Missing required fields: environmentId, clientId, and clientSecret are all required.',
-                received: {
-                    environmentId: !!environmentId,
-                    clientId: !!clientId,
-                    clientSecret: !!clientSecret
-                }
-            });
-        }
-        
-        // Validate field formats
-        const errors = [];
-        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(environmentId)) {
-            errors.push('Environment ID must be a valid UUID format');
-        }
-        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId)) {
-            errors.push('Client ID must be a valid UUID format');
-        }
-        if (clientSecret.length < 10) {
-            errors.push('Client Secret appears to be too short');
-        }
-        
-        if (errors.length > 0) {
-            return res.status(400).json({
-                error: 'Invalid credential format',
-                details: errors
+                error: 'Missing required fields: environmentId, clientId, and clientSecret are all required.'
             });
         }
         
@@ -466,16 +388,16 @@ router.delete('/', (req, res) => {
     if (environmentId && clientId) {
         // Clear specific token
         const cacheKey = createCacheKey(environmentId, clientId);
-        if (tokenCache[cacheKey]) {
-            delete tokenCache[cacheKey];
+        if (exports.tokenCache[cacheKey]) {
+            delete exports.tokenCache[cacheKey];
             logManager.info('Specific token cleared from cache', { environmentId, clientId });
         } else {
             logManager.info('No token found in cache for specified environment', { environmentId, clientId });
         }
     } else {
         // Clear all tokens
-        const cacheSize = Object.keys(tokenCache).length;
-        tokenCache = {};
+        const cacheSize = Object.keys(exports.tokenCache).length;
+        exports.tokenCache = {};
         logManager.info('All tokens cleared from cache', { previousCacheSize: cacheSize });
     }
     
@@ -486,7 +408,7 @@ router.delete('/', (req, res) => {
 router.get('/cache', (req, res) => {
     const now = Date.now();
     const cacheInfo = {
-        totalTokens: Object.keys(tokenCache).length,
+        totalTokens: Object.keys(exports.tokenCache).length,
         configuration: {
             cacheDuration: TOKEN_CONFIG.CACHE_DURATION / 1000,
             bufferTime: TOKEN_CONFIG.BUFFER_TIME / 1000,
@@ -495,7 +417,7 @@ router.get('/cache', (req, res) => {
         tokens: []
     };
     
-    for (const [cacheKey, tokenData] of Object.entries(tokenCache)) {
+    for (const [cacheKey, tokenData] of Object.entries(exports.tokenCache)) {
         const [environmentId, clientId] = cacheKey.split(':');
         const ageMinutes = Math.floor((now - tokenData.createdAt) / (60 * 1000));
         const timeRemaining = Math.floor((tokenData.expiresAt - now) / (60 * 1000));
@@ -519,8 +441,17 @@ router.get('/cache', (req, res) => {
     res.json(cacheInfo);
 });
 
+// Export the router and functions
 module.exports = {
     router,
     getWorkerToken,
-    getUserIdByUsername
-}; 
+    getUserIdByUsername,
+    tokenCache
+};
+
+// Export individual functions for direct import
+exports.getUserIdByUsername = getUserIdByUsername;
+exports.tokenCache = tokenCache;
+
+// Keep the existing router export for backward compatibility
+module.exports = router;
