@@ -8,16 +8,27 @@ const fs = require('fs');
 const logger = require('morgan');
 const logManager = require('./utils/logManager');
 
+// Initialize logging
+logManager.logStructured('=== Server Starting ===');
+logManager.info('Environment:', {
+    NODE_ENV: process.env.NODE_ENV || 'development',
+    PORT: process.env.PORT || 3000,
+    LOG_LEVEL: process.env.LOG_LEVEL || 'info'
+});
+
 // Import routers
 const importRouter = require('./routes/import');
 const tokenRouter = require('./routes/token');
+const deleteRouter = require('./routes/delete');
+const logsRouter = require('./routes/logs');
+const modifyRouter = require('./routes/modify');
 
 const app = express();
 
 // Middleware
 app.use(logger('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
 
 // Serve static files from the public directory
@@ -36,8 +47,36 @@ fs.readdir(publicPath, (err, files) => {
 app.use(express.static(publicPath));
 
 // API routes
-app.use('/api/import', importRouter);
+app.use('/api/import', (req, res, next) => {
+    logManager.info(`[${req.method}] ${req.originalUrl}`, {
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        contentType: req.get('content-type')
+    });
+    next();
+}, importRouter);
+
 app.use('/api/token', tokenRouter.router);
+app.use('/api/delete', deleteRouter);
+app.use('/api/logs', logsRouter);
+app.use('/api/modify', modifyRouter);
+
+// Log all requests
+app.use((req, res, next) => {
+    const start = Date.now();
+    
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        logManager.info(`[${req.method}] ${req.originalUrl}`, {
+            status: res.statusCode,
+            duration: `${duration}ms`,
+            contentLength: res.get('content-length') || 0,
+            userAgent: req.get('user-agent')
+        });
+    });
+    
+    next();
+});
 
 // Handle SPA routing - serve index.html for any other GET requests
 app.get('*', (req, res) => {
@@ -55,14 +94,71 @@ app.get('*', (req, res) => {
 
 // Error handling
 app.use((err, req, res, next) => {
-    console.error('Error:', err.stack);
-    res.status(500).send('Something broke!');
+    logManager.error('Unhandled error:', {
+        message: err.message,
+        stack: err.stack,
+        url: req.originalUrl,
+        method: req.method,
+        body: req.body,
+        params: req.params,
+        query: req.query
+    });
+    
+    res.status(500).json({
+        success: false,
+        error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
+        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+    });
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+    logManager.error('Unhandled Rejection at:', {
+        promise,
+        reason: reason.toString(),
+        stack: reason.stack
+    });
+    // Consider whether to exit the process here
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+    logManager.error('Uncaught Exception:', {
+        error: error.toString(),
+        stack: error.stack
+    });
+    // Consider whether to exit the process here
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log('Environment:', process.env.NODE_ENV || 'development');
+const server = app.listen(PORT, () => {
+    logManager.logStructured('=== Server Started ===');
+    logManager.info(`Server is running on port ${PORT}`, {
+        environment: process.env.NODE_ENV || 'development',
+        pid: process.pid,
+        nodeVersion: process.version,
+        platform: process.platform,
+        memoryUsage: process.memoryUsage()
+    });
 });
+
+// Handle server shutdown gracefully
+const shutdown = () => {
+    logManager.logStructured('=== Server Shutting Down ===');
+    server.close(() => {
+        logManager.info('Server stopped');
+        process.exit(0);
+    });
+
+    // Force shutdown after 5 seconds
+    setTimeout(() => {
+        logManager.error('Forcing shutdown...');
+        process.exit(1);
+    }, 5000);
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 module.exports = app;
