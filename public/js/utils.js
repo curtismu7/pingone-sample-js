@@ -26,6 +26,17 @@ class Utils {
         // SSE connection for real-time progress
         this.sseConnection = null;
         this.currentOperationId = null;
+        
+        // Batch processing state
+        this.batchSize = 5; // Update counters every 5 records
+        this.currentBatch = 0;
+        this.batchCounters = {
+            success: 0,
+            failed: 0,
+            skipped: 0,
+            total: 0
+        };
+        this.batchUpdateTimeout = null;
 
         this.init();
     }
@@ -290,6 +301,111 @@ class Utils {
     }
 
     // ============================================================================
+    // CREDENTIAL MANAGEMENT
+    // These functions handle credential storage and retrieval
+    // DEBUG: If credentials aren't stored or retrieved correctly, check these functions
+    // ============================================================================
+
+    getCredentials() {
+        // Get stored credentials from localStorage
+        // Check both 'pingone_credentials' (legacy) and 'pingone-settings' (current) keys
+        try {
+            // Try current key first
+            let creds = localStorage.getItem('pingone-settings');
+            
+            // Fall back to legacy key if not found
+            if (!creds) {
+                creds = localStorage.getItem('pingone_credentials');
+            }
+            
+            if (!creds) return null;
+            
+            const parsed = JSON.parse(creds);
+            
+            // Validate required fields
+            if (!parsed.environmentId || !parsed.clientId) {
+                return null;
+            }
+            
+            // Only require clientSecret if useClientSecret is true
+            if (parsed.useClientSecret && !parsed.clientSecret) {
+                return null;
+            }
+            
+            return parsed;
+        } catch (error) {
+            console.error('Error getting credentials:', error);
+            return null;
+        }
+    }
+    
+    saveCredentials(credentials) {
+        // Save credentials to localStorage
+        // Uses 'pingone-settings' key for consistency with settings page
+        // DEBUG: If credentials aren't saved, check localStorage quota and permissions
+        try {
+            // Ensure we have required fields
+            if (!credentials || !credentials.environmentId || !credentials.clientId) {
+                throw new Error('Missing required credential fields');
+            }
+            
+            // Create a clean credentials object with only the fields we need
+            const credsToSave = {
+                environmentId: credentials.environmentId,
+                clientId: credentials.clientId,
+                clientSecret: credentials.clientSecret || '',
+                baseUrl: credentials.baseUrl || 'https://api.pingone.com',
+                useClientSecret: !!credentials.useClientSecret,
+                saveCredentials: credentials.saveCredentials !== false // default to true
+            };
+            
+            // Save to localStorage with error handling for quota exceeded
+            try {
+                // Save to new format
+                localStorage.setItem('pingone-settings', JSON.stringify(credsToSave));
+                
+                // Also save to legacy key for backward compatibility
+                const legacyCreds = {
+                    environmentId: credsToSave.environmentId,
+                    clientId: credsToSave.clientId,
+                    clientSecret: credsToSave.clientSecret,
+                    baseUrl: credsToSave.baseUrl,
+                    useClientSecret: credsToSave.useClientSecret
+                };
+                localStorage.setItem('pingone_credentials', JSON.stringify(legacyCreds));
+                
+                this.log('Credentials saved to localStorage', 'info');
+            } catch (error) {
+                if (error.name === 'QuotaExceededError') {
+                    throw new Error('Storage quota exceeded. Please clear some space or save fewer settings.');
+                }
+                throw error;
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Error saving credentials:', error);
+            return false;
+        }
+    }
+    
+    clearCredentials() {
+        // Clear stored credentials from both new and legacy storage keys
+        // DEBUG: Check browser's Application tab to verify keys are removed
+        try {
+            // Remove both current and legacy storage keys
+            localStorage.removeItem('pingone-settings');
+            localStorage.removeItem('pingone_credentials');
+            
+            this.log('Credentials cleared from localStorage', 'info');
+            return true;
+        } catch (error) {
+            console.error('Error clearing credentials:', error);
+            return false;
+        }
+    }
+
+    // ============================================================================
     // LOGGING SYSTEM
     // These functions provide structured logging for debugging and monitoring
     // DEBUG: Check browser console and server logs for detailed operation tracking
@@ -514,16 +630,28 @@ class Utils {
                             <!-- Real-time Stats Section -->
                             <div id="spinner-stats" class="spinner-stats">
                                 <div class="stats-header">
-                                    <span class="stats-label">Current Status</span>
+                                    <span class="stats-label">Batch Processing Status</span>
+                                    <span class="stats-batch-info">(updates every 5 records)</span>
                                 </div>
                                 <div class="stats-content">
                                     <div class="stats-row">
                                         <span class="stats-label">Success:</span>
-                                        <span class="stats-value success">0</span>
+                                        <span id="batch-success" class="stats-value success">0</span>
+                                        <span id="batch-success-badge" class="stats-badge success-badge">+0</span>
                                     </div>
                                     <div class="stats-row">
-                                        <span class="stats-label">Errors:</span>
-                                        <span class="stats-value error">0</span>
+                                        <span class="stats-label">Failed:</span>
+                                        <span id="batch-failed" class="stats-value error">0</span>
+                                        <span id="batch-failed-badge" class="stats-badge error-badge">+0</span>
+                                    </div>
+                                    <div class="stats-row">
+                                        <span class="stats-label">Skipped:</span>
+                                        <span id="batch-skipped" class="stats-value warning">0</span>
+                                        <span id="batch-skipped-badge" class="stats-badge warning-badge">+0</span>
+                                    </div>
+                                    <div class="stats-row">
+                                        <span class="stats-label">Current Batch:</span>
+                                        <span id="batch-progress" class="stats-value">0/5</span>
                                     </div>
                                 </div>
                             </div>
@@ -604,58 +732,22 @@ class Utils {
     }
 
     showOperationSpinner(message, fileName = null, operationType = null, recordCount = null) {
-        // Create a new AbortController for this operation
-        this.currentOperationController = new AbortController();
-
         this.showSpinner(message, true);
         this.startSpinnerAnimation();
-        
-        // Show enhanced spinner for operations with workflow steps
-        // DEBUG: Use this for complex operations that need step-by-step progress
-        const spinner = document.getElementById('spinner-overlay');
-        const title = document.getElementById('spinner-title');
-        const subtitle = document.getElementById('spinner-subtitle');
-        const steps = document.getElementById('spinner-steps');
-        const progress = document.getElementById('spinner-progress');
-
-        if (!spinner) {
-            this.log('Spinner system not initialized', 'error');
-            return;
-        }
-
-        // Set title and subtitle
-        title.textContent = message;
-        subtitle.textContent = 'Initializing operation...';
-        
-        // Update operation details
         this.updateOperationDetails(operationType, fileName, recordCount);
+        this.resetBatchCounters();
         
-        // Initialize progress
-        this.updateProgress(0, 100);
+        // Initialize batch UI
+        document.getElementById('batch-success').textContent = '0';
+        document.getElementById('batch-failed').textContent = '0';
+        document.getElementById('batch-skipped').textContent = '0';
+        document.getElementById('batch-progress').textContent = '0/5';
         
-        // Show sections
-        steps.style.display = 'block';
-        steps.innerHTML = ''; // Clear previous steps
-        progress.classList.add('hidden');
-        
-        // Reset button to Cancel in header
-        const headerBtn = document.getElementById('spinner-header-btn-container');
-        const footerBtn = document.getElementById('spinner-footer-btn-container');
-        const statusSummary = document.getElementById('spinner-status-summary');
-        if (headerBtn) headerBtn.classList.remove('hidden');
-        if (footerBtn) footerBtn.classList.add('hidden');
-        if (statusSummary) statusSummary.classList.add('hidden');
-        document.getElementById('spinner-cancel').textContent = 'Cancel Operation';
-        
-        // Start operation timer
-        this.operationStartTime = Date.now();
-        this.updateElapsedTime();
-        this.elapsedTimer = setInterval(() => this.updateElapsedTime(), 1000);
-        
-        spinner.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-
-        this.log('Operation spinner displayed', 'debug', { message, fileName, operationType, recordCount });
+        // Hide all badges initially
+        ['success', 'failed', 'skipped'].forEach(type => {
+            const badge = document.getElementById(`batch-${type}-badge`);
+            if (badge) badge.style.display = 'none';
+        });
     }
 
     updateOperationDetails(operationType, fileName, recordCount) {
@@ -900,44 +992,57 @@ class Utils {
         }
     }
 
-    completeOperationSpinner(successCount, failedCount = 0) {
-        // Complete the operation spinner with final results
+    completeOperationSpinner(successCount, failedCount = 0, skippedCount = 0) {
         this.stopProgressSimulation();
         this.stopElapsedTimer();
-        
-        // Update final step
-        const stepElement = document.getElementById('step-processing');
-        if (stepElement) {
-            const stepText = `✅ Operation completed: ${successCount} successful, ${failedCount} failed`;
-            stepElement.querySelector('.step-text').textContent = stepText;
-            stepElement.className = 'spinner-step success';
+
+        // Ensure endTime is set before formatting to prevent errors
+        if (!this.endTime) {
+            this.endTime = new Date();
         }
-        
-        // Update subtitle
-        this.updateSpinnerSubtitle('Operation completed successfully');
-        
-        // Show status summary
-        this.showStatusSummary(successCount, failedCount);
-        
-        // Hide progress
-        const progressElement = document.getElementById('spinner-progress');
-        if (progressElement) {
-            progressElement.classList.add('hidden');
-        }
-        
-        // Move button to footer and change to Close
-        const headerBtn = document.getElementById('spinner-header-btn-container');
-        const footerBtn = document.getElementById('spinner-footer-btn-container');
-        if (headerBtn) headerBtn.classList.add('hidden');
-        if (footerBtn) footerBtn.classList.remove('hidden');
-        
-        // Add event listener to close button to handle completion
+
+        const spinner = document.getElementById('spinner-overlay');
+        const statusSummary = document.getElementById('spinner-status-summary');
+        const successEl = document.getElementById('summary-success');
+        const failedEl = document.getElementById('summary-failed');
+        const skippedEl = document.getElementById('summary-skipped');
+        const timeEl = document.getElementById('summary-time');
         const closeBtn = document.getElementById('spinner-close');
-        if (closeBtn) {
-            closeBtn.onclick = () => this.handleSpinnerCompletion();
+        
+        if (spinner) {
+            // Ensure final updates are applied
+            this._applyBatchUpdates();
+            
+            // Update status summary
+            if (statusSummary && successEl && failedEl && timeEl) {
+                successEl.textContent = successCount;
+                failedEl.textContent = failedCount;
+                if (skippedEl) skippedEl.textContent = skippedCount;
+                timeEl.textContent = this.formatElapsedTime(this.getElapsedTime());
+                statusSummary.classList.remove('hidden');
+            }
+            
+            // Update progress to 100%
+            const progressFill = document.getElementById('progress-fill');
+            if (progressFill) {
+                progressFill.style.width = '100%';
+                document.getElementById('progress-percentage').textContent = '100%';
+            }
+            
+            // Show close button
+            if (closeBtn) {
+                closeBtn.closest('.spinner-footer-btn-container').classList.remove('hidden');
+            }
+            
+            // Update spinner state
+            spinner.classList.add('completed');
+            
+            // Log completion
+            this.log(`Operation completed - ${successCount} succeeded, ${failedCount} failed, ${skippedCount} skipped`, 'info');
         }
         
-        this.log('Operation spinner completed', 'debug', { successCount, failedCount });
+        // Reset batch counters for next operation
+        this.resetBatchCounters();
     }
 
     handleSpinnerCompletion() {
@@ -1292,19 +1397,26 @@ class Utils {
     }
 
     // Update spinner statistics
-    updateSpinnerStats(success, errors) {
-        const statsElement = document.getElementById('spinner-stats');
-        if (statsElement) {
-            statsElement.innerHTML = `
-                <div class="stats-row">
-                    <span class="stats-label">Success:</span>
-                    <span class="stats-value success">${success}</span>
-                </div>
-                <div class="stats-row">
-                    <span class="stats-label">Errors:</span>
-                    <span class="stats-value error">${errors}</span>
-                </div>
-            `;
+    updateSpinnerStats(success = 0, failed = 0, skipped = 0, immediate = false) {
+        // Update batch counters
+        this.batchCounters.success += success;
+        this.batchCounters.failed += failed;
+        this.batchCounters.skipped += skipped;
+        this.batchCounters.total += success + failed + skipped;
+        this.currentBatch = (this.currentBatch + success + failed + skipped) % this.batchSize;
+        
+        // Update batch progress
+        document.getElementById('batch-progress').textContent = 
+            `${this.currentBatch}/${this.batchSize}`;
+        
+        // Update batch badges
+        if (success > 0) {
+            const badge = document.getElementById('batch-success-badge');
+            badge.textContent = `+${success}`;
+            badge.style.display = 'inline-block';
+            setTimeout(() => {
+                badge.style.display = 'none';
+            }, 1000);
         }
     }
 
@@ -1315,6 +1427,123 @@ class Utils {
             this.sseConnection = null;
         }
         this.currentOperationId = null;
+    }
+
+    // Confirmation dialog
+    showConfirmationDialog(title, message) {
+        return new Promise((resolve) => {
+            const dialog = document.createElement('div');
+            dialog.className = 'modal';
+            dialog.style.display = 'block';
+            dialog.style.position = 'fixed';
+            dialog.style.zIndex = '1000';
+            dialog.style.left = '0';
+            dialog.style.top = '0';
+            dialog.style.width = '100%';
+            dialog.style.height = '100%';
+            dialog.style.backgroundColor = 'rgba(0,0,0,0.4)';
+            
+            const dialogContent = document.createElement('div');
+            dialogContent.className = 'modal-content';
+            dialogContent.style.backgroundColor = '#fefefe';
+            dialogContent.style.margin = '15% auto';
+            dialogContent.style.padding = '20px';
+            dialogContent.style.border = '1px solid #888';
+            dialogContent.style.width = '80%';
+            dialogContent.style.maxWidth = '500px';
+            dialogContent.style.borderRadius = '5px';
+            
+            const titleElement = document.createElement('h3');
+            titleElement.textContent = title;
+            titleElement.style.marginTop = '0';
+            
+            const messageElement = document.createElement('p');
+            messageElement.textContent = message;
+            
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.justifyContent = 'flex-end';
+            buttonContainer.style.marginTop = '20px';
+            buttonContainer.style.gap = '10px';
+            
+            const confirmButton = document.createElement('button');
+            confirmButton.textContent = 'Confirm';
+            confirmButton.className = 'btn btn-primary';
+            confirmButton.onclick = () => {
+                document.body.removeChild(dialog);
+                resolve(true);
+            };
+            
+            const cancelButton = document.createElement('button');
+            cancelButton.textContent = 'Cancel';
+            cancelButton.className = 'btn btn-secondary';
+            cancelButton.onclick = () => {
+                document.body.removeChild(dialog);
+                resolve(false);
+            };
+            
+            buttonContainer.appendChild(cancelButton);
+            buttonContainer.appendChild(confirmButton);
+            
+            dialogContent.appendChild(titleElement);
+            dialogContent.appendChild(messageElement);
+            dialogContent.appendChild(buttonContainer);
+            dialog.appendChild(dialogContent);
+            
+            document.body.appendChild(dialog);
+        });
+    }
+
+    // Error message
+    showErrorMessage(message) {
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-danger';
+        alert.style.position = 'fixed';
+        alert.style.top = '20px';
+        alert.style.right = '20px';
+        alert.style.zIndex = '1000';
+        alert.style.minWidth = '300px';
+        alert.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+        alert.textContent = message;
+        
+        document.body.appendChild(alert);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            alert.style.opacity = '0';
+            alert.style.transition = 'opacity 0.5s';
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    document.body.removeChild(alert);
+                }
+            }, 500);
+        }, 5000);
+    }
+
+    // Success message
+    showSuccessMessage(message) {
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-success';
+        alert.style.position = 'fixed';
+        alert.style.top = '20px';
+        alert.style.right = '20px';
+        alert.style.zIndex = '1000';
+        alert.style.minWidth = '300px';
+        alert.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+        alert.textContent = message;
+        
+        document.body.appendChild(alert);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            alert.style.opacity = '0';
+            alert.style.transition = 'opacity 0.5s';
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    document.body.removeChild(alert);
+                }
+            }, 500);
+        }, 5000);
     }
 }
 

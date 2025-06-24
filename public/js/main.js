@@ -305,109 +305,163 @@ class MainPage {
         }
     }
 
-    loadPersistedFileSelection() {
-        // Restore previously selected file information from localStorage
+    async loadPersistedFileSelection() {
         try {
-            const fileInfoJson = localStorage.getItem('lastSelectedFile');
-            if (fileInfoJson) {
-                const fileInfo = JSON.parse(fileInfoJson);
-                
-                // Create a synthetic file object
-                const file = new File([''], fileInfo.name, {
+            var settings = utils.getSettings() || {};
+            var fileInfo = null;
+            var source = '';
+            
+            // First try to load from settings (default file)
+            if (settings.settingsDefaultFile) {
+                fileInfo = settings.settingsDefaultFile;
+                source = 'settings';
+            } 
+            // If no default file in settings, try last selected file
+            else if (localStorage.getItem('lastSelectedFile')) {
+                fileInfo = JSON.parse(localStorage.getItem('lastSelectedFile'));
+                source = 'localStorage';
+            }
+            
+            if (!fileInfo) return false; // No file to restore
+            
+            // Create a synthetic file object
+            var file = new File(
+                [fileInfo.content], 
+                fileInfo.name, 
+                { 
                     type: fileInfo.type || 'text/csv',
                     lastModified: fileInfo.lastModified || Date.now()
-                });
-                
-                // Set the current file and update UI
-                this.currentFile = file;
-                this.currentFileInfo = {
-                    name: fileInfo.name,
-                    size: fileInfo.size,
-                    lastModified: fileInfo.lastModified,
-                    type: fileInfo.type
-                };
-                
-                // Update the file input
-                const fileInput = document.getElementById('csv-file');
-                if (fileInput) {
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(file);
-                    fileInput.files = dataTransfer.files;
                 }
-                
-                // Update the UI
-                this.updateFileInfo(file);
-                this.enableActionButtons();
-                
-                utils.log('File selection restored from previous session', 'info');
+            );
+            
+            // Update the file input
+            var dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            var fileInput = document.getElementById('csv-file');
+            if (fileInput) {
+                fileInput.files = dataTransfer.files;
             }
+            
+            // Update current file and UI
+            this.currentFile = file;
+            
+            // Parse CSV for preview if content exists
+            if (fileInfo.content) {
+                try {
+                    var parseResult = await this.parseCSVPreview(fileInfo.content);
+                    this.updateFileInfo(file, parseResult);
+                } catch (parseError) {
+                    console.error('Error parsing CSV:', parseError);
+                    utils.showErrorMessage('Error parsing CSV: ' + parseError.message);
+                    this.updateFileInfo(file, {});
+                }
+            } else {
+                // If no content, just update with basic file info
+                this.updateFileInfo(file, {});
+                utils.log('No file content available for preview', 'warn');
+            }
+            
+            this.enableActionButtons(true);
+            
+            // Update status indicators
+            this.updateOperationStatus('import', 'ready');
+            this.updateOperationStatus('modify', 'ready');
+            this.updateOperationStatus('delete', 'ready');
+            
+            // Show file status element if it exists
+            var fileStatusElement = document.getElementById('current-file-status');
+            if (fileStatusElement) {
+                fileStatusElement.classList.remove('hidden');
+            }
+            
+            // Log the source of the restored file
+            utils.log('Restored file from ' + source + ': ' + fileInfo.name + ' (' + this.formatFileSize(fileInfo.size) + ')', 'info');
+            
+            return true;
+            
         } catch (error) {
-            console.error('Error loading persisted file selection:', error);
-            localStorage.removeItem('lastSelectedFile'); // Clear corrupted data
+            console.error('Error loading persisted file:', error);
+            localStorage.removeItem('settingsDefaultFile');
+            localStorage.removeItem('lastSelectedFile');
         }
     }
 
     async handleFileSelect(event) {
-        const file = event.target.files[0];
+        var file = event.target.files[0];
         if (!file) return;
 
         this.currentFile = file;
         
-        // Save file info to localStorage
-        const fileInfo = {
-            name: file.name,
-            size: file.size,
-            lastModified: file.lastModified,
-            type: file.type
-        };
+        var self = this;
         
-        // Save to both localStorage and settings
-        localStorage.setItem('lastSelectedFile', JSON.stringify(fileInfo));
-        
-        // Also update the settings in case we want to sync with server later
-        const settings = utils.getSettings();
-        settings.lastSelectedFile = fileInfo;
-        utils.saveSettings(settings);
-
-        // Update UI
-        this.updateFileInfo(file);
-        this.enableActionButtons(true);
-        
-        // Update status indicators
-        this.updateOperationStatus('import', 'ready');
-        this.updateOperationStatus('modify', 'ready');
-        this.updateOperationStatus('delete', 'ready');
-        
-        // Log the file selection
-        utils.log(`File selected: ${file.name} (${this.formatFileSize(file.size)})`, 'info');
-    }
-
-    updateFileInfo(file) {
-        if (!file) return;
-        
-        // Format file size
-        const formatFileSize = (bytes) => {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        };
-
-        // Update the current file display
-        const currentFileElement = document.getElementById('current-file');
-        if (currentFileElement) {
-            currentFileElement.textContent = file.name;
-            currentFileElement.title = `${file.name} (${formatFileSize(file.size)})`;
+        try {
+            // Show loading state
+            utils.showLoading('Processing file...');
+            
+            // Read file content for preview and storage
+            var fileContent = await self.readFileAsText(file);
+            
+            // Save file info to localStorage with content for persistence
+            var fileInfo = {
+                name: file.name,
+                size: file.size,
+                lastModified: file.lastModified,
+                type: file.type,
+                content: fileContent  // Store content for persistence
+            };
+            
+            // Save to localStorage
+            try {
+                localStorage.setItem('lastSelectedFile', JSON.stringify(fileInfo));
+                
+                // Also update the settings in case we want to sync with server later
+                var settings = utils.getSettings() || {};
+                settings.lastSelectedFile = fileInfo;
+                utils.saveSettings(settings);
+                
+                // Parse CSV for preview
+                try {
+                    var parseResult = await self.parseCSVPreview(fileContent);
+                    
+                    // Update UI with file info and CSV preview
+                    self.updateFileInfo(file, parseResult);
+                    self.enableActionButtons(true);
+                    
+                    // Update status indicators
+                    self.updateOperationStatus('import', 'ready');
+                    self.updateOperationStatus('modify', 'ready');
+                    self.updateOperationStatus('delete', 'ready');
+                    
+                    // Show file status element if it exists
+                    var fileStatusElement = document.getElementById('current-file-status');
+                    if (fileStatusElement) {
+                        fileStatusElement.classList.remove('hidden');
+                    }
+                    
+                    // Log successful file selection
+                    utils.log('Selected file: ' + file.name + ' (' + self.formatFileSize(file.size) + ')', 'info');
+                    
+                } catch (parseError) {
+                    console.error('Error parsing CSV:', parseError);
+                    utils.showErrorMessage('Error parsing CSV: ' + parseError.message);
+                    self.clearFileSelection();
+                }
+                
+            } catch (storageError) {
+                console.error('Error saving file to storage:', storageError);
+                utils.showErrorMessage('Error saving file to storage: ' + storageError.message);
+                self.clearFileSelection();
+            }
+            
+        } catch (fileError) {
+            console.error('Error reading file:', fileError);
+            utils.showErrorMessage('Error reading file: ' + fileError.message);
+            self.clearFileSelection();
+            
+        } finally {
+            // Always hide loading state
+            utils.hideLoading();
         }
-
-        // Show the file info section
-        const fileStatusElement = document.getElementById('current-file-status');
-        if (fileStatusElement) {
-            fileStatusElement.classList.remove('hidden');
-        }
-
-        // Update the file info display
         const fileInfoElement = document.getElementById('selected-file-info');
         if (fileInfoElement) {
             fileInfoElement.innerHTML = `
@@ -445,474 +499,190 @@ class MainPage {
         }
     }
 
-    displayCurrentFileStatus(fileInfo, sourceClass) {
-        // Display current file information in the UI as a table, collapsible
-        const statusElement = document.getElementById('current-file-status');
-        const detailsElement = document.getElementById('current-file-details');
-        const header = document.getElementById('file-info-collapsible-header');
-        const caret = document.getElementById('file-info-caret');
-        if (statusElement && detailsElement && header && caret) {
-            if (fileInfo) {
-                // Show section and header
-                statusElement.classList.remove('hidden');
-                statusElement.style.display = 'block';
-                header.style.display = 'flex';
-                // Default: expanded
-                detailsElement.style.display = 'block';
-                caret.style.transform = 'rotate(90deg)';
-                // Inject table
-                const columns = (fileInfo.headers && fileInfo.headers.length) ? fileInfo.headers.join(', ') : '-';
-                detailsElement.innerHTML = `
-                    <div class=\"current-file-info show ${sourceClass}\">
-                        <table class=\"file-info-table\">
-                            <tr><th>File Name</th><td>${fileInfo.name}</td></tr>
-                            <tr><th>File Size</th><td>${this.formatFileSize(fileInfo.size)}</td></tr>
-                            <tr><th>Number of Entries</th><td>${fileInfo.records}</td></tr>
-                            <tr><th>Columns</th><td>${columns}</td></tr>
-                            <tr><th>Last Modified</th><td>${fileInfo.lastModified || '-'}</td></tr>
-                            <tr><th>Created</th><td>${fileInfo.created || '-'}</td></tr>
-                        </table>
-                    </div>
-                `;
-                // Collapsible logic
-                header.onclick = () => {
-                    if (detailsElement.style.display === 'none') {
-                        detailsElement.style.display = 'block';
-                        caret.style.transform = 'rotate(90deg)';
-                    } else {
-                        detailsElement.style.display = 'none';
-                        caret.style.transform = 'rotate(0deg)';
-                    }
-                };
-            } else {
-                // Hide section and header, clear details
-                statusElement.classList.add('hidden');
-                statusElement.style.display = 'none';
-                header.style.display = 'none';
-                detailsElement.innerHTML = '';
-            }
-        }
-    }
-
     formatFileSize(bytes) {
-        // Convert bytes to human-readable format
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    initializeCollapsibleSections() {
+        const collapsibleHeaders = document.querySelectorAll('.collapsible-header');
+        
+        collapsibleHeaders.forEach(header => {
+            // Remove any existing click listeners to prevent duplicates
+            const newHeader = header.cloneNode(true);
+            header.parentNode.replaceChild(newHeader, header);
+            
+            newHeader.addEventListener('click', () => {
+                // Toggle the active class on the header
+                newHeader.classList.toggle('active');
+                
+                // Toggle the content
+                const contentId = newHeader.getAttribute('aria-controls');
+                const content = document.getElementById(contentId);
+                if (content) {
+                    const isExpanded = content.style.display !== 'none';
+                    content.style.display = isExpanded ? 'none' : 'block';
+                    newHeader.setAttribute('aria-expanded', !isExpanded);
+                    
+                    // Rotate the toggle icon
+                    const icon = newHeader.querySelector('.toggle-icon');
+                    if (icon) {
+                        icon.textContent = isExpanded ? '►' : '▼';
+                    }
+                }
+            });
+            
+            // Add keyboard support
+            newHeader.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    newHeader.click();
+                }
+            });
+        });
+    }
+
+    updateFileInfo(file, csvData = {}) {
+        try {
+            const fileInfoElement = document.getElementById('selected-file-info');
+            if (!fileInfoElement) return;
+
+            const { header = [], firstFewRecords = [] } = csvData;
+            const fileSize = file.size ? ` (${(file.size / 1024).toLocaleString(undefined, {maximumFractionDigits: 1})} KB)` : '';
+            const lastModified = file.lastModified ? new Date(file.lastModified).toLocaleString() : 'N/A';
+            const rowCount = firstFewRecords.length;
+            const columnCount = header.length;
+            
+            // Build the file info HTML
+            let fileInfoHTML = `
+                <div class="file-info">
+                    <div class="file-header">
+                        <i class="fas fa-file-csv"></i>
+                        <h4>${file.name}${fileSize}</h4>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-meta">
+                            <span class="file-meta-item">
+                                <i class="far fa-calendar-alt"></i> Modified: ${lastModified}
+                            </span>`;
+                            
+            if (rowCount > 0) {
+                fileInfoHTML += `
+                            <span class="file-meta-item">
+                                <i class="fas fa-list-ol"></i> ${rowCount} rows
+                            </span>`;
+            }
+            
+            if (columnCount > 0) {
+                fileInfoHTML += `
+                            <span class="file-meta-item">
+                                <i class="fas fa-columns"></i> ${columnCount} columns
+                            </span>`;
+            }
+            
+            fileInfoHTML += `
+                        </div>`;
+
+            // Add CSV preview if we have data
+            if (header && firstFewRecords && firstFewRecords.length > 0) {
+                fileInfoHTML += `
+                        <div class="file-preview">
+                            <div class="preview-header">Preview:</div>
+                            <div class="preview-table-container">
+                                <table class="preview-table">
+                                    <thead>
+                                        <tr>${header.map(h => `<th>${h}</th>`).join('')}</tr>
+                                    </thead>
+                                    <tbody>
+                                        ${firstFewRecords.map(row => 
+                                            `<tr>${header.map(h => 
+                                                `<td>${row[h] || ''}</td>`
+                                            ).join('')}</tr>`
+                                        ).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>`;
+            }
+
+            // Add file actions
+            fileInfoHTML += `
+                        <div class="file-actions">
+                            <button type="button" class="btn-clear" id="clear-file-btn">
+                                <i class="fas fa-times"></i> Clear File
+                            </button>
+                            <button type="button" class="btn-view" id="view-full-file-btn">
+                                <i class="fas fa-expand"></i> View Full
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+                
+            // Set the HTML content
+            fileInfoElement.innerHTML = fileInfoHTML;
+            
+            // Add event listeners for the buttons
+            const clearBtn = document.getElementById('clear-file-btn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.clearFileSelection();
+                });
+            }
+            
+            const viewFullBtn = document.getElementById('view-full-file-btn');
+            if (viewFullBtn) {
+                viewFullBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.showFullFileContent(file);
+                });
+            }
+            
+            // Show success message
+            utils.showSuccessMessage(`File loaded: ${file.name}`);
+            
+        } catch (error) {
+            console.error('Error handling file:', error);
+            utils.showErrorMessage(`Error processing file: ${error.message || 'Unknown error'}`);
+            this.clearFileSelection();
+        }
+        // Always hide loading state
+        utils.hideLoading();
     }
 
     clearFileSelection() {
         // Reset file selection state
         this.currentFile = null;
         this.currentFileInfo = null;
-        localStorage.removeItem('currentFileInfo');
+        
         // Clear UI elements
         const fileInput = document.getElementById('csv-file');
         if (fileInput) fileInput.value = '';
-        const statusElement = document.getElementById('current-file-status');
-        const detailsElement = document.getElementById('current-file-details');
-        const header = document.getElementById('file-info-collapsible-header');
-        if (statusElement && detailsElement && header) {
-            statusElement.classList.add('hidden');
-            statusElement.style.display = 'none';
-            header.style.display = 'none';
-            detailsElement.innerHTML = '';
-        }
-        utils.log('File selection cleared', 'info');
-    }
-
-    updateOperationStatus(operation, status, results = null, error = null) {
-        // Update operation status display in UI
-        // DEBUG: Check this function if status indicators aren't updating
-        const statusElement = document.getElementById(`${operation}-status`);
-        if (!statusElement) return;
-
-        let statusClass = '';
-        let statusText = '';
-        let detailsHtml = '';
-
-        switch (status) {
-            case 'in-progress':
-                statusClass = 'status-in-progress';
-                statusText = 'In Progress...';
-                break;
-            case 'completed':
-                statusClass = 'status-success';
-                statusText = 'Completed';
-                if (results) {
-                    const { successCount = 0, errorCount = 0 } = results;
-                    detailsHtml = `
-                        <div class="status-details">
-                            <span class="success-count">✅ ${successCount} successful</span>
-                            <span class="error-count">❌ ${errorCount} failed</span>
-                        </div>
-                    `;
-                }
-                break;
-            case 'failed':
-                statusClass = 'status-error';
-                statusText = 'Failed – See Logs';
-                if (error) {
-                    detailsHtml = `
-                        <div class="status-details">
-                            <div class="error-summary">${error}</div>
-                        </div>
-                    `;
-                }
-                break;
-            default:
-                statusClass = '';
-                statusText = 'Ready';
-        }
-
-        statusElement.innerHTML = `
-            <div class="operation-status ${statusClass}">
-                <span class="status-label">Status:</span>
-                <span class="status-text">${statusText}</span>
-                ${detailsHtml}
-            </div>
-        `;
-    }
-
-    async importUsers() {
-        // Import users from CSV file with real-time progress
-        // DEBUG: Check browser console and server logs for detailed operation status
-        if (this.importInProgress) {
-            utils.log('Import already in progress', 'warning');
-            return;
-        }
-
-        if (!this.currentFile) {
-            utils.showModal(
-                'Warning',
-                `<div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0;">
-                    <span style="font-size: 2rem; color: #c8102e;">⚠️</span>
-                    <span style="font-size: 1.1rem; color: #b71c1c; font-weight: 500;">Please select a CSV file first.</span>
-                </div>`,
-                { showCancel: false }
-            );
-            return;
-        }
-
-        this.importInProgress = true;
         
-        try {
-            // Get credentials from settings
-            const credentials = utils.getSettings();
+        const fileInfoElement = document.getElementById('selected-file-info');
+        if (fileInfoElement) {
+            fileInfoElement.innerHTML = `
+                <div class="no-file-selected">
+                    <i class="fas fa-file-import"></i>
+                    <p>No file selected</p>
+                    <p class="hint">Upload a CSV file to get started</p>
+                </div>`;
+            // Legacy function - progress now handled by utils.showOperationSpinner()
+            utils.log('showImportProgress called (legacy)', 'debug');
             
-            if (!credentials || !credentials.environmentId || !credentials.clientId || (credentials.useClientSecret && !credentials.clientSecret)) {
-                utils.showModal(
-                    'Configuration Error',
-                    'Your PingOne credentials are not configured. Please go to the Settings page to configure them.',
-                    { showCancel: false, confirmText: 'Go to Settings', onConfirm: () => window.location.href = 'settings.html' }
-                );
-                this.importInProgress = false;
-                return;
-            }
-            
-            utils.log('Retrieved credentials for import', 'debug', { credentials });
-
-            // Parse CSV file
-            utils.log('Parsing CSV file for import', 'info', { fileName: this.currentFile.name });
-            const records = await utils.parseCSV(this.currentFile);
-            
-            utils.log('CSV parsing result', 'debug', { 
-                recordCount: records?.length || 0,
-                firstRecord: records?.[0] || null
-            });
-            
-            if (!records || records.length === 0) {
-                throw new Error('No valid records found in CSV file');
-            }
-
-            // Show operation spinner with initial status
-            utils.showOperationSpinner(
-                'Bulk User Import',
-                this.currentFile.name,
-                'Import',
-                records.length
-            );
-            
-            // Start workflow steps
-            utils.startWorkflowSteps();
-            utils.addFileLoadingStep(this.currentFile.name, records.length);
-            utils.addProcessingStep();
-            
-            // Update status to show we're starting the API call
-            utils.updateSpinnerSubtitle('Starting bulk import operation...');
-
-            // Process import with real-time progress
-            utils.log('Starting bulk import operation', 'info', { 
-                recordCount: records.length,
-                environmentId: credentials.environmentId.substring(0, 8) + '...'
-            });
-            
-            const result = await this.processImport(records, credentials);
-            
-            // Update status to show completion
-            utils.updateSpinnerSubtitle('Import operation completed');
-            
-            // Display results
-            if (result.success) {
-                const successCount = result.results?.filter(r => r.status === 'imported').length || 0;
-                const errorCount = result.results?.filter(r => r.status === 'error').length || 0;
-                const skippedCount = result.results?.filter(r => r.status === 'skipped').length || 0;
-                
-                utils.log('Import operation completed successfully', 'info', {
-                    totalRecords: records.length,
-                    successCount,
-                    errorCount,
-                    skippedCount,
-                    duration: result.duration
-                });
-                
-                this.updateOperationStatus('Import', 'completed', result.results);
-                this.displayResults(`Import Results (${successCount} successful, ${errorCount} failed, ${skippedCount} skipped)`, result.results);
-                
-                // Complete spinner with all counts
-                utils.completeOperationSpinner(successCount, errorCount, skippedCount);
-            } else {
-                throw new Error(result.error || 'Import operation failed');
-            }
-            
-        } catch (error) {
-            utils.log('Import operation failed', 'error', { error: error.message });
-            
-            // Update status to show error
-            utils.updateSpinnerSubtitle(`Import failed: ${error.message}`);
-            
-            // Show error in spinner but don't show modal
-            utils.failOperationSpinner('step-processing', error.message);
-            
-            // Always complete spinner with 0/0 to show summary
-            utils.completeOperationSpinner(0, 0);
-            
-            this.updateOperationStatus('Import', 'failed', null, error);
-        } finally {
-            this.importInProgress = false;
-            utils.disconnectProgress();
+            // Hide any loading states
+            utils.hideLoading();
         }
     }
-
-    async modifyUsers() {
-        // Main modify users function
-        // DEBUG: Similar debugging approach as importUsers()
-        if (this.modifyInProgress) {
-            utils.showModal('Warning', 'Modify operation already in progress.');
-            return;
-        }
-
-        if (!this.currentFile) {
-            utils.showModal(
-                'Warning',
-                `<div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0;">
-                    <span style="font-size: 2rem; color: #c8102e;">⚠️</span>
-                    <span style="font-size: 1.1rem; color: #b71c1c; font-weight: 500;">Please select a CSV file first.</span>
-                </div>`,
-                { showCancel: false }
-            );
-            return;
-        }
-
-        const credentials = utils.getSettings();
-        if (!credentials || !credentials.environmentId || !credentials.clientId || (credentials.useClientSecret && !credentials.clientSecret)) {
-            utils.showModal(
-                'Configuration Error',
-                'Your PingOne credentials are not configured. Please go to the Settings page to configure them.',
-                { showCancel: false, confirmText: 'Go to Settings', onConfirm: () => window.location.href = 'settings.html' }
-            );
-            return;
-        }
-
-        try {
-            this.modifyInProgress = true;
-            this.updateOperationStatus('modify', 'in-progress');
-            
-            utils.showOperationSpinner('Modifying Users...', this.currentFile.name, 'User Modification', this.currentFileInfo.records);
-            utils.log(`Modify Users started – action: Modify Users (${this.currentFileInfo.records} records)`, 'info');
-
-            utils.startWorkflowSteps();
-
-            // Read and parse file
-            const records = await utils.parseCSV(this.currentFile);
-            
-            utils.addFileLoadingStep(this.currentFileInfo.name, records.length);
-            utils.addProcessingStep();
-
-            // Start progress simulation
-            utils.startProgressSimulation(records.length, 6000, this.currentFileInfo.name);
-
-            // Process the modification
-            const results = await this.processModify(records, credentials);
-
-            utils.addFinalizingStep(results.summary.successful, results.summary.failed, 'Modify');
-            utils.completeOperationSpinner(results.summary.successful, results.summary.failed);
-            
-            this.updateOperationStatus('modify', 'completed', results);
-            this.displayResults('Modify Results', results.results);
-            
-            utils.log(`Modified ${results.summary.successful} users (${results.summary.failed} failed) in ${results.duration}ms.`, 'info');
-            utils.log(`Action complete – Modify Users: ${results.summary.successful}, Failed: ${results.summary.failed} ✅`, 'info');
-
-        } catch (error) {
-            console.error('Modify operation failed:', error);
-            utils.log(`Modify operation failed: ${error.message}`, 'error');
-            this.updateOperationStatus('modify', 'failed', null, error.message);
-            
-            // Show error in spinner but don't show modal
-            utils.failOperationSpinner('step-processing', error.message);
-            
-            // Don't show error modal - let the spinner handle completion
-            // The user can close the spinner and see results
-            
-        } finally {
-            this.modifyInProgress = false;
-        }
-    }
-
-    async deleteUsers() {
-        // Main delete users function
-        // DEBUG: Check if CSV contains usernames or user IDs for deletion
-        if (this.deleteInProgress) {
-            utils.showModal('Warning', 'Delete operation already in progress.');
-            return;
-        }
-
-        if (!this.currentFile) {
-            utils.showModal(
-                'Warning',
-                `<div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0;">
-                    <span style="font-size: 2rem; color: #c8102e;">⚠️</span>
-                    <span style="font-size: 1.1rem; color: #b71c1c; font-weight: 500;">Please select a CSV file first.</span>
-                </div>`,
-                { showCancel: false }
-            );
-            return;
-        }
-
-        const credentials = utils.getSettings();
-        if (!credentials || !credentials.environmentId || !credentials.clientId || (credentials.useClientSecret && !credentials.clientSecret)) {
-            utils.showModal(
-                'Configuration Error',
-                'Your PingOne credentials are not configured. Please go to the Settings page to configure them.',
-                { showCancel: false, confirmText: 'Go to Settings', onConfirm: () => window.location.href = 'settings.html' }
-            );
-            return;
-        }
-
-        try {
-            this.deleteInProgress = true;
-            this.updateOperationStatus('delete', 'in-progress');
-            
-            utils.showOperationSpinner('Deleting Users...', this.currentFile.name, 'User Deletion', this.currentFileInfo.records);
-            utils.log(`Delete Users started – action: Delete Users (${this.currentFileInfo.records} records)`, 'info');
-
-            utils.startWorkflowSteps();
-
-            // Read and parse file
-            const records = await utils.parseCSV(this.currentFile);
-            
-            utils.addFileLoadingStep(this.currentFileInfo.name, records.length);
-            utils.addProcessingStep();
-
-            // Start progress simulation
-            utils.startProgressSimulation(records.length, 5000, this.currentFileInfo.name);
-
-            // Process the deletion
-            const results = await this.processDelete(records, credentials);
-
-            utils.addFinalizingStep(results.successCount, results.errorCount, 'Delete');
-            utils.completeOperationSpinner(results.successCount, results.errorCount);
-            
-            this.updateOperationStatus('delete', 'completed', results);
-            this.displayResults('Delete Results', results.results);
-            
-            utils.log(`Deleted ${results.successCount} users (${results.errorCount} failed).`, 'info');
-            utils.log(`Action complete – Delete Users: ${results.successCount}, Failed: ${results.errorCount} ✅`, 'info');
-
-        } catch (error) {
-            console.error('Delete operation failed:', error);
-            utils.log(`Delete operation failed: ${error.message}`, 'error');
-            this.updateOperationStatus('delete', 'failed', null, error.message);
-            
-            // Show error in spinner but don't show modal
-            utils.failOperationSpinner('step-processing', error.message);
-            
-            // Don't show error modal - let the spinner handle completion
-            // The user can close the spinner and see results
-            
-        } finally {
-            this.deleteInProgress = false;
-        }
-    }
-
-    async deleteUserByUsername() {
-        // Delete single user by username
-        // DEBUG: Check if username field is populated and valid
-        const usernameInput = document.getElementById('delete-username');
-        const username = usernameInput?.value?.trim();
-
-        if (!username) {
-            utils.showModal('Warning', 'Please enter a username to delete.');
-            return;
-        }
-
-        const settings = utils.getSettings();
-        if (!settings || !settings.environmentId || !settings.clientId || !settings.clientSecret) {
-            utils.showModal('Error', 'Please configure your PingOne credentials in Settings first.');
-            return;
-        }
-
-        // Confirm deletion
-        if (!confirm(`Are you sure you want to delete user "${username}"? This action cannot be undone.`)) {
-            return;
-        }
-
-        try {
-            utils.showOperationSpinner('Deleting User...', username, 'Single User Deletion', 1);
-            utils.log('Delete Single User started – action: Delete Single User', 'info');
-
-            // Process single user deletion - server will handle token
-            const result = await this.processSingleDelete(username, settings);
-
-            if (result.success) {
-                utils.completeOperationSpinner(1, 0); // 1 success, 0 failed
-                this.updateOperationStatus('delete', 'completed', result.results);
-                this.displayResults('Delete Single User Result', [result]);
-            } else {
-                throw new Error(result.message || 'Failed to delete user');
-            }
-
-        } catch (error) {
-            utils.handleError(error, 'deleteUserByUsername');
-            utils.failOperationSpinner('step-processing', error.message);
-        }
-    }
-
-    readFileAsText(file) {
-        // Read file as text for parsing
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(e);
-            reader.readAsText(file);
-        });
-    }
-
-    // Legacy functions - now handled by utils.showOperationSpinner() and utils.hideSpinner()
-    // These functions are kept for backward compatibility but are no longer used
-    showImportProgress() {
-        // Legacy function - progress now handled by utils.showOperationSpinner()
-        utils.log('showImportProgress called (legacy)', 'debug');
-    }
-
+    
     hideImportProgress() {
         // Legacy function - progress now handled by utils.hideSpinner()
         utils.log('hideImportProgress called (legacy)', 'debug');
     }
-
+    
     async processImport(records, credentials) {
         // Process bulk user import with real-time progress
         // DEBUG: Check server logs for detailed PingOne API responses

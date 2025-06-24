@@ -214,22 +214,52 @@
                                 Log Filename
                                 <span class="tooltip-icon" data-tippy-content="The name of the file to write logs to on the server.">i</span>
                             </label>
-                            <input type="text" id="log-file-name" name="logFileName" class="input-30char" 
-                                   value="import-status.log" placeholder="import-status.log">
+                            <div class="input-with-button">
+                                <input type="text" id="log-file-name" name="logFileName" class="input-30char" 
+                                       value="import-status.log" placeholder="import-status.log">
+                                <button type="button" id="update-log-file" class="btn-small" title="Update log file name">
+                                    <i class="fas fa-save"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Current Log File</label>
+                            <div class="file-display">
+                                <span id="current-log-file" class="file-name">import-status.log</span>
+                            </div>
                         </div>
 
                         <div class="logging-controls">
-                            <button type="button" id="start-logging-btn" class="btn-pill">Start Logging</button>
-                            <button type="button" id="stop-logging-btn" class="btn-pill">Stop Logging</button>
-                            <button type="button" id="export-log-btn" class="btn-pill">Export Log</button>
-                            <button type="button" id="clear-log-btn" class="btn-pill">Clear Log</button>
+                            <div class="button-group">
+                                <button type="button" id="start-logging-btn" class="btn-pill btn-success">
+                                    <i class="fas fa-play"></i> Start Logging
+                                </button>
+                                <button type="button" id="stop-logging-btn" class="btn-pill btn-danger" style="display: none;">
+                                    <i class="fas fa-stop"></i> Stop Logging
+                                </button>
+                            </div>
+                            <div class="button-group">
+                                <button type="button" id="export-log-btn" class="btn-pill">
+                                    <i class="fas fa-download"></i> Export Log
+                                </button>
+                                <button type="button" id="clear-log-btn" class="btn-pill btn-warning">
+                                    <i class="fas fa-trash"></i> Clear Log
+                                </button>
+                            </div>
                         </div>
                         
                         <div class="logging-status-container">
-                            <div id="logging-status" class="status-display">
-                                <span class="status-label">Status:</span>
-                                <span class="status-value">Inactive</span>
-                                <span class="status-icon">✗</span>
+                            <div id="logging-status" class="status-display inactive">
+                                <div class="status-content">
+                                    <span class="status-label">Logging Status:</span>
+                                    <span class="status-value">Inactive</span>
+                                    <span class="status-icon">✗</span>
+                                </div>
+                                <div id="logging-loading" class="loading-spinner" style="display: none;">
+                                    <div class="spinner"></div>
+                                    <span>Saving changes...</span>
+                                </div>
                             </div>
                         </div>
                     </form>
