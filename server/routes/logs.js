@@ -1,20 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const logManager = require('../utils/logManager');
+const fs = require('fs');
+const path = require('path');
 
 // Get logs (for API testing and debugging)
 router.get('/', (req, res) => {
     try {
-        const logContent = logManager.getLogContent();
-        res.json({
-            success: true,
-            message: 'Logs retrieved successfully',
-            logContent: logContent,
-            config: logManager.config
-        });
+        const logFile = path.join(__dirname, '../logs/combined.log');
+        if (!fs.existsSync(logFile)) {
+            return res.json([]);
+        }
+
+        const logs = fs.readFileSync(logFile, 'utf8');
+        res.json(logs.split('\n').filter(Boolean));
     } catch (error) {
-        logManager.logger.error('Failed to get logs', { error: error.message });
-        res.status(500).json({ error: 'Failed to get logs' });
+        res.status(500).json({ error: 'Failed to read logs' });
     }
 });
 
@@ -31,7 +32,11 @@ router.post('/', (req, res) => {
 
 // Get current logging status and configuration
 router.get('/config', (req, res) => {
-    res.json(logManager.config);
+    res.json({
+        logLevel: 'info',
+        logFormat: 'json',
+        logRetention: '7d'
+    });
 });
 
 // Update logging configuration
