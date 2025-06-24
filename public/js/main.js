@@ -307,76 +307,141 @@ class MainPage {
 
     loadPersistedFileSelection() {
         // Restore previously selected file information from localStorage
-        // DEBUG: Check localStorage for 'currentFileInfo' key
         try {
-            const savedFileInfo = localStorage.getItem('currentFileInfo');
-            if (savedFileInfo) {
-                this.currentFileInfo = JSON.parse(savedFileInfo);
-                this.displayCurrentFileStatus(this.currentFileInfo, 'persisted-file-info');
+            const fileInfoJson = localStorage.getItem('lastSelectedFile');
+            if (fileInfoJson) {
+                const fileInfo = JSON.parse(fileInfoJson);
+                
+                // Create a synthetic file object
+                const file = new File([''], fileInfo.name, {
+                    type: fileInfo.type || 'text/csv',
+                    lastModified: fileInfo.lastModified || Date.now()
+                });
+                
+                // Set the current file and update UI
+                this.currentFile = file;
+                this.currentFileInfo = {
+                    name: fileInfo.name,
+                    size: fileInfo.size,
+                    lastModified: fileInfo.lastModified,
+                    type: fileInfo.type
+                };
+                
+                // Update the file input
+                const fileInput = document.getElementById('csv-file');
+                if (fileInput) {
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    fileInput.files = dataTransfer.files;
+                }
+                
+                // Update the UI
+                this.updateFileInfo(file);
+                this.enableActionButtons();
+                
                 utils.log('File selection restored from previous session', 'info');
             }
         } catch (error) {
             console.error('Error loading persisted file selection:', error);
-            localStorage.removeItem('currentFileInfo'); // Clear corrupted data
+            localStorage.removeItem('lastSelectedFile'); // Clear corrupted data
         }
     }
 
     async handleFileSelect(event) {
-        // Fallback: ensure spinner is present before any spinner usage
-        if (!document.getElementById('spinner-overlay') && window.utils && typeof window.utils.setupSpinner === 'function') {
-            window.utils.setupSpinner();
-        }
-        // Handle CSV file selection and validation
-        // DEBUG: If file processing fails, check file format and size
         const file = event.target.files[0];
-        if (!file) {
-            this.clearFileSelection();
-            return;
+        if (!file) return;
+
+        this.currentFile = file;
+        
+        // Save file info to localStorage
+        const fileInfo = {
+            name: file.name,
+            size: file.size,
+            lastModified: file.lastModified,
+            type: file.type
+        };
+        
+        // Save to both localStorage and settings
+        localStorage.setItem('lastSelectedFile', JSON.stringify(fileInfo));
+        
+        // Also update the settings in case we want to sync with server later
+        const settings = utils.getSettings();
+        settings.lastSelectedFile = fileInfo;
+        utils.saveSettings(settings);
+
+        // Update UI
+        this.updateFileInfo(file);
+        this.enableActionButtons(true);
+        
+        // Update status indicators
+        this.updateOperationStatus('import', 'ready');
+        this.updateOperationStatus('modify', 'ready');
+        this.updateOperationStatus('delete', 'ready');
+        
+        // Log the file selection
+        utils.log(`File selected: ${file.name} (${this.formatFileSize(file.size)})`, 'info');
+    }
+
+    updateFileInfo(file) {
+        if (!file) return;
+        
+        // Format file size
+        const formatFileSize = (bytes) => {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        };
+
+        // Update the current file display
+        const currentFileElement = document.getElementById('current-file');
+        if (currentFileElement) {
+            currentFileElement.textContent = file.name;
+            currentFileElement.title = `${file.name} (${formatFileSize(file.size)})`;
         }
 
-        // Validate file type
-        if (!file.name.toLowerCase().endsWith('.csv')) {
-            utils.showModal('Error', 'Please select a CSV file.');
-            this.clearFileSelection();
-            return;
+        // Show the file info section
+        const fileStatusElement = document.getElementById('current-file-status');
+        if (fileStatusElement) {
+            fileStatusElement.classList.remove('hidden');
         }
 
-        // Validate file size (10MB limit)
-        const maxSize = 10 * 1024 * 1024; // 10MB
-        if (file.size > maxSize) {
-            utils.showModal('Error', 'File size exceeds 10MB limit.');
-            this.clearFileSelection();
-            return;
+        // Update the file info display
+        const fileInfoElement = document.getElementById('selected-file-info');
+        if (fileInfoElement) {
+            fileInfoElement.innerHTML = `
+                <div><strong>File:</strong> ${file.name}</div>
+                <div><strong>Size:</strong> ${formatFileSize(file.size)}</div>
+                <div><strong>Last Modified:</strong> ${new Date(file.lastModified).toLocaleString()}</div>
+            `;
         }
+    }
 
-        try {
-            // Read and parse CSV file
-            const text = await this.readFileAsText(file);
-            const parsedData = Papa.parse(text, { header: true, skipEmptyLines: true });
-            
-            if (parsedData.errors.length > 0) {
-                console.warn('CSV parsing warnings:', parsedData.errors);
+    enableActionButtons(enable = true) {
+        // Enable or disable action buttons based on file selection
+        const buttons = [
+            'import-btn',
+            'modify-btn',
+            'delete-btn',
+            'export-results'
+        ];
+
+        buttons.forEach(buttonId => {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                button.disabled = !enable;
             }
+        });
 
-            // Store file information
-            this.currentFile = file;
-            this.currentFileInfo = {
-                name: file.name,
-                size: file.size,
-                records: parsedData.data.length,
-                headers: parsedData.meta.fields || [],
-                lastModified: new Date(file.lastModified).toLocaleString()
-            };
-
-            // Persist file info for page reloads
-            localStorage.setItem('currentFileInfo', JSON.stringify(this.currentFileInfo));
-
-            // Display file status
-            this.displayCurrentFileStatus(this.currentFileInfo, 'selected-file-info');
-        } catch (error) {
-            console.error('Error processing file:', error);
-            utils.showModal('Error', `Failed to process file: ${error.message}`);
-            this.clearFileSelection();
+        // Update UI state
+        const fileStatus = document.getElementById('current-file-status');
+        if (fileStatus) {
+            if (enable) {
+                fileStatus.classList.remove('hidden');
+            } else {
+                fileStatus.classList.add('hidden');
+            }
         }
     }
 
@@ -591,21 +656,23 @@ class MainPage {
             
             // Display results
             if (result.success) {
-                const successCount = result.results?.filter(r => r.status === 'created').length || 0;
+                const successCount = result.results?.filter(r => r.status === 'imported').length || 0;
                 const errorCount = result.results?.filter(r => r.status === 'error').length || 0;
+                const skippedCount = result.results?.filter(r => r.status === 'skipped').length || 0;
                 
                 utils.log('Import operation completed successfully', 'info', {
                     totalRecords: records.length,
                     successCount,
                     errorCount,
+                    skippedCount,
                     duration: result.duration
                 });
                 
                 this.updateOperationStatus('Import', 'completed', result.results);
-                this.displayResults(`Import Results (${successCount} successful, ${errorCount} failed)`, result.results);
+                this.displayResults(`Import Results (${successCount} successful, ${errorCount} failed, ${skippedCount} skipped)`, result.results);
                 
-                // Complete spinner with success
-                utils.completeOperationSpinner(successCount, errorCount);
+                // Complete spinner with all counts
+                utils.completeOperationSpinner(successCount, errorCount, skippedCount);
             } else {
                 throw new Error(result.error || 'Import operation failed');
             }
@@ -912,31 +979,76 @@ class MainPage {
     }
 
     async processModify(records, credentials) {
-        // Process bulk user modification
+        // Process bulk user modification with real-time progress
         // DEBUG: Ensure CSV contains user IDs or usernames for modification
         const startTime = Date.now();
         
         try {
+            // Update status to show we're making the API call
+            utils.updateSpinnerSubtitle('Sending modify request to server...');
+            
+            const payload = {
+                users: records,
+                environmentId: credentials.environmentId,
+                clientId: credentials.clientId,
+                clientSecret: credentials.clientSecret
+            };
+            
+            utils.log('Sending modify payload to /api/modify/bulk', 'debug', {
+                payload: {
+                    ...payload,
+                    clientSecret: 'REDACTED', // Do not log the actual secret
+                    users: `${payload.users.length} records`
+                }
+            });
+            
             const response = await fetch('/api/modify/bulk', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    users: records,
-                    environmentId: credentials.environmentId,
-                    clientId: credentials.clientId,
-                    clientSecret: credentials.clientSecret
-                }),
+                body: JSON.stringify(payload),
                 signal: utils.currentOperationController.signal
             });
 
             if (!response.ok) {
                 const errorText = await response.text();
+                utils.log('Modify API error response', 'error', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    errorText: errorText
+                });
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
 
             const result = await response.json();
+            
+            // Update status to show we're connecting to progress updates
+            utils.updateSpinnerSubtitle('Connecting to progress updates...');
+            
+            // Connect to SSE for real-time progress updates
+            if (result.operationId) {
+                utils.connectToProgress(result.operationId, 'modify');
+            }
+            
+            // Wait for operation to complete via SSE
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Operation timed out'));
+                }, 300000); // 5 minutes timeout
+                
+                const checkComplete = () => {
+                    const spinner = document.getElementById('spinner-overlay');
+                    if (spinner && spinner.classList.contains('hidden')) {
+                        clearTimeout(timeout);
+                        resolve();
+                    } else {
+                        setTimeout(checkComplete, 100);
+                    }
+                };
+                checkComplete();
+            });
+            
             const duration = Date.now() - startTime;
             
             return {
@@ -950,7 +1062,7 @@ class MainPage {
     }
 
     async processDelete(records, credentials) {
-        // Process bulk user deletion
+        // Process bulk user deletion with real-time progress
         // DEBUG: Check if usernames exist in PingOne before attempting deletion
         const startTime = Date.now();
         
@@ -962,26 +1074,71 @@ class MainPage {
                 throw new Error('No valid usernames found in CSV file');
             }
 
+            // Update status to show we're making the API call
+            utils.updateSpinnerSubtitle('Sending delete request to server...');
+            
+            const payload = {
+                usernames: usernames,
+                environmentId: credentials.environmentId,
+                clientId: credentials.clientId,
+                clientSecret: credentials.clientSecret
+            };
+            
+            utils.log('Sending delete payload to /api/delete', 'debug', {
+                payload: {
+                    ...payload,
+                    clientSecret: 'REDACTED', // Do not log the actual secret
+                    usernames: `${payload.usernames.length} usernames`
+                }
+            });
+
             const response = await fetch('/api/delete', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    usernames: usernames,
-                    environmentId: credentials.environmentId,
-                    clientId: credentials.clientId,
-                    clientSecret: credentials.clientSecret
-                }),
+                body: JSON.stringify(payload),
                 signal: utils.currentOperationController.signal
             });
 
             if (!response.ok) {
                 const errorText = await response.text();
+                utils.log('Delete API error response', 'error', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    errorText: errorText
+                });
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
 
             const result = await response.json();
+            
+            // Update status to show we're connecting to progress updates
+            utils.updateSpinnerSubtitle('Connecting to progress updates...');
+            
+            // Connect to SSE for real-time progress updates
+            if (result.operationId) {
+                utils.connectToProgress(result.operationId, 'delete');
+            }
+            
+            // Wait for operation to complete via SSE
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Operation timed out'));
+                }, 300000); // 5 minutes timeout
+                
+                const checkComplete = () => {
+                    const spinner = document.getElementById('spinner-overlay');
+                    if (spinner && spinner.classList.contains('hidden')) {
+                        clearTimeout(timeout);
+                        resolve();
+                    } else {
+                        setTimeout(checkComplete, 100);
+                    }
+                };
+                checkComplete();
+            });
+            
             const duration = Date.now() - startTime;
             
             return {
@@ -1065,17 +1222,18 @@ class MainPage {
         if (summary) {
             const totalRecords = this.resultsData.length;
             const successCount = this.resultsData.filter(r => r.status === 'imported' || r.status === 'modified' || r.status === 'deleted').length;
-            const errorCount = totalRecords - successCount;
-            
-            summary.textContent = `Showing ${startIndex + 1}-${Math.min(endIndex, totalRecords)} of ${totalRecords} records (${successCount} successful, ${errorCount} failed)`;
+            const skippedCount = this.resultsData.filter(r => r.status === 'skipped').length;
+            const errorCount = totalRecords - successCount - skippedCount;
+            summary.textContent = `Showing ${startIndex + 1}-${Math.min(endIndex, totalRecords)} of ${totalRecords} records (${successCount} successful, ${errorCount} failed, ${skippedCount} skipped)`;
         }
 
         // Render table rows
         tbody.innerHTML = pageData.map((result, index) => {
             const globalIndex = startIndex + index;
-            const statusClass = result.status === 'imported' || result.status === 'modified' || result.status === 'deleted' ? 'success' : 'error';
-            const showDebugButton = result.status !== 'imported' && result.status !== 'modified' && result.status !== 'deleted';
-            
+            let statusClass = 'error';
+            if (result.status === 'imported' || result.status === 'modified' || result.status === 'deleted') statusClass = 'success';
+            else if (result.status === 'skipped') statusClass = 'skipped';
+            const showDebugButton = result.status !== 'imported' && result.status !== 'modified' && result.status !== 'deleted' && result.status !== 'skipped';
             return `
                 <tr class="result-row ${statusClass}">
                     <td>${globalIndex + 1}</td>
