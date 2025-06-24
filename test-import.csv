@@ -1,0 +1,4 @@
+email,username,operation
+test1@example.com,testuser1,create
+test2@example.com,testuser2,modify
+test3@example.com,testuser3,delete
