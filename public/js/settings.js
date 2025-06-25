@@ -115,6 +115,11 @@ class SettingsPage {
                 input.addEventListener('change', function() { 
                     const value = input.type === 'checkbox' ? input.checked : input.value;
                     this.saveSetting(input.name, value); 
+                    
+                    // Toggle client secret field visibility
+                    if (input.id === 'use-client-secret') {
+                        this.toggleClientSecretField(input.checked);
+                    }
                 }.bind(this));
             }.bind(this));
 
@@ -126,6 +131,26 @@ class SettingsPage {
                     event.stopPropagation();
                     this.toggleAdvancedSection(event);
                 });
+            }
+            
+            // Toggle password visibility for client secret
+            const toggleSecret = document.getElementById('toggle-secret');
+            if (toggleSecret) {
+                toggleSecret.addEventListener('click', () => {
+                    const secretInput = document.getElementById('client-secret');
+                    if (secretInput) {
+                        const type = secretInput.type === 'password' ? 'text' : 'password';
+                        secretInput.type = type;
+                        toggleSecret.classList.toggle('fa-eye');
+                        toggleSecret.classList.toggle('fa-eye-slash');
+                    }
+                });
+            }
+            
+            // Initialize client secret field visibility
+            const useClientSecret = document.getElementById('use-client-secret');
+            if (useClientSecret) {
+                this.toggleClientSecretField(useClientSecret.checked);
             }
         }
 
@@ -148,9 +173,13 @@ class SettingsPage {
         // Handle file input changes
         const fileInput = document.getElementById('default-file');
         if (fileInput) {
-            fileInput.addEventListener('change', (e) => {
+            fileInput.addEventListener('change', async (e) => {
                 if (e.target.files.length > 0) {
-                    this.saveSetting('defaultFile', e.target.files[0].name);
+                    const file = e.target.files[0];
+                    this.saveSetting('defaultFile', file.name);
+                    await this.processCsvFile(file);
+                } else {
+                    this.hideFileInfo();
                 }
             });
         }
@@ -378,21 +407,18 @@ class SettingsPage {
         const updateStatus = (text, type = '') => {
             if (!statusElement) return;
             statusElement.textContent = text;
-            statusElement.className = type;
-            
-            // Clear success/error messages after 5 seconds
-            if (type === 'success' || type === 'error') {
-                setTimeout(() => {
-                    if (statusElement.textContent === text) {
-                        statusElement.textContent = '';
-                        statusElement.className = '';
-                    }
-                }, 5000);
-            }
+            statusElement.className = 'status-message';
+            if (type) statusElement.classList.add(type);
         };
         
-        // Set initial loading state
-        if (button) button.disabled = true;
+        // Validate elements exist
+        if (!button) {
+            console.error('Test credentials button not found');
+            return false;
+        }
+        
+        // Set loading state
+        button.disabled = true;
         if (loadingElement) loadingElement.style.display = 'inline-block';
         updateStatus('Testing connection...');
         
@@ -403,10 +429,18 @@ class SettingsPage {
             // Get values from form
             const environmentId = document.getElementById('environment-id').value.trim();
             const clientId = document.getElementById('client-id').value.trim();
-            const clientSecret = document.getElementById('client-secret').value.trim();
+            const useClientSecret = document.getElementById('use-client-secret')?.checked || false;
+            let clientSecret = '';
+            
+            if (useClientSecret) {
+                clientSecret = document.getElementById('client-secret')?.value.trim() || '';
+                if (!clientSecret) {
+                    throw new Error('Client secret is required when "Use Client Secret" is checked');
+                }
+            }
             
             // Validate required fields
-            if (!environmentId || !clientId || !clientSecret) {
+            if (!environmentId || !clientId) {
                 throw new Error('Please fill in all required fields');
             }
             
@@ -419,7 +453,7 @@ class SettingsPage {
                         await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
                     }
                     
-                    // Test credentials
+                    // Test credentials with or without client secret
                     const response = await window.utils.testCredentials(environmentId, clientId, clientSecret);
                     
                     if (response && response.success) {
@@ -777,6 +811,14 @@ class SettingsPage {
         }
     }
 
+    // Toggle client secret field visibility
+    toggleClientSecretField(show) {
+        const clientSecretGroup = document.querySelector('.client-secret-group');
+        if (clientSecretGroup) {
+            clientSecretGroup.style.display = show ? 'block' : 'none';
+        }
+    }
+    
     // Clear log file
     async clearLog() {
         const clearBtn = document.getElementById('clear-log-btn');
@@ -967,6 +1009,150 @@ class SettingsPage {
                 updateBtn.innerHTML = originalBtnText;
             }
         }
+    }
+    
+    // Process uploaded CSV file
+    async processCsvFile(file) {
+        if (!file || !file.name.endsWith('.csv')) {
+            this.hideFileInfo();
+            return;
+        }
+        
+        try {
+            // Show loading state
+            this.showFileInfoLoading();
+            
+            // Read file as text
+            const text = await this.readFileAsText(file);
+            
+            // Parse CSV (simple parsing for headers and first row as sample)
+            const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
+            if (lines.length === 0) {
+                throw new Error('CSV file is empty');
+            }
+            
+            // Parse headers and first data row
+            const headers = this.parseCsvLine(lines[0]);
+            const sampleRow = lines.length > 1 ? this.parseCsvLine(lines[1]) : [];
+            
+            // Update UI with file info
+            this.updateFileInfo(file, headers, sampleRow);
+            
+        } catch (error) {
+            console.error('Error processing CSV file:', error);
+            this.updateStatus(`Error processing file: ${error.message}`, 'error');
+            this.hideFileInfo();
+        }
+    }
+    
+    // Read file as text
+    readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(new Error('Error reading file'));
+            reader.readAsText(file);
+        });
+    }
+    
+    // Parse a single CSV line (simple implementation, may need enhancement for complex CSVs)
+    parseCsvLine(line) {
+        // Simple CSV parsing - splits on commas not inside quotes
+        const result = [];
+        let inQuotes = false;
+        let currentField = '';
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(currentField.trim());
+                currentField = '';
+            } else {
+                currentField += char;
+            }
+        }
+        
+        // Add the last field
+        result.push(currentField.trim());
+        return result;
+    }
+    
+    // Show file info section with loading state
+    showFileInfoLoading() {
+        const fileInfoSection = document.getElementById('file-info-section');
+        if (fileInfoSection) {
+            fileInfoSection.style.display = 'block';
+            fileInfoSection.innerHTML = `
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i> Processing file...
+                </div>`;
+        }
+    }
+    
+    // Update file info in the UI
+    updateFileInfo(file, headers, sampleRow) {
+        const fileInfoSection = document.getElementById('file-info-section');
+        if (!fileInfoSection) return;
+        
+        // Format file size
+        const formatFileSize = (bytes) => {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        };
+        
+        // Format last modified date
+        const formatDate = (date) => {
+            return new Date(date).toLocaleString();
+        };
+        
+        // Update file metadata
+        document.getElementById('file-name').textContent = file.name;
+        document.getElementById('file-size').textContent = formatFileSize(file.size);
+        document.getElementById('file-modified').textContent = formatDate(file.lastModified);
+        
+        // Update headers table
+        const tbody = document.querySelector('#csv-headers-table tbody');
+        if (tbody) {
+            tbody.innerHTML = '';
+            headers.forEach((header, index) => {
+                const row = document.createElement('tr');
+                const sampleValue = sampleRow[index] || '';
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td><code>${this.escapeHtml(header)}</code></td>
+                    <td><span class="sample-value">${this.escapeHtml(sampleValue)}</span></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Show the section
+        fileInfoSection.style.display = 'block';
+    }
+    
+    // Hide file info section
+    hideFileInfo() {
+        const fileInfoSection = document.getElementById('file-info-section');
+        if (fileInfoSection) {
+            fileInfoSection.style.display = 'none';
+        }
+    }
+    
+    // Helper to escape HTML for safe display
+    escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return '';
+        return unsafe
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 }
 
