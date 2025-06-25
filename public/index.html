@@ -1,83 +1,103 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Ping Identity - User Management</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Using jsDelivr for Font Awesome with explicit version -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <!-- Tippy.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/tippy.js@6.3.7/dist/tippy.css">
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" type="image/png" href="images/logo.png">
-</head>
-<body>
+  </head>
+  <body>
     <!-- Header -->
     <header class="header">
-        <div class="header-content">
-            <div class="logo-container">
-                <button class="mobile-menu-toggle" id="mobile-menu-toggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <img src="images/logo.png" alt="Ping Identity" class="logo">
-                <h1>User Management</h1>
-            </div>
-            <div class="header-actions">
-                <span id="current-file" class="current-file"></span>
-            </div>
+      <div class="header-content">
+        <div class="logo-container">
+          <button type="button" class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle navigation">
+            <i class="fas fa-bars" aria-hidden="true"></i>
+          </button>
+          <img src="images/logo.png" alt="Ping Identity Logo" class="logo" width="40" height="40">
+          <h1>User Management</h1>
         </div>
+        <div class="header-actions">
+          <span id="current-file" class="current-file"></span>
+        </div>
+      </div>
     </header>
 
     <!-- Mobile Sidebar Overlay -->
-    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
 
     <!-- App Container for Push Behavior -->
     <div class="app-container">
-        <!-- Navigation -->
-        <nav class="sidebar">
-            <div class="nav-logo">
-                <img src="images/logo.png" alt="Ping Identity" class="nav-logo-img">
-            </div>
-            <ul class="nav-menu">
-                <li class="nav-item">
-                    <a href="index.html" class="nav-link active">
-                        <i class="fas fa-users nav-icon"></i>
-                        <span>User Management</span>
-                    </a>
-                </li>
-                <li class="nav-item nav-dropdown">
-                    <a href="#" class="nav-link" id="quick-actions-toggle">
-                        <i class="fas fa-bolt nav-icon"></i>
-                        <span>Quick Actions</span>
-                        <i class="fas fa-chevron-down nav-arrow"></i>
-                    </a>
-                    <ul class="nav-submenu">
-                        <li><a href="#import-panel" class="nav-submenu-link quick-action" data-action="import">
-                            <i class="fas fa-upload nav-icon"></i> 
-                            <span>Import Users</span>
-                        </a></li>
-                        <li><a href="#delete-panel" class="nav-submenu-link quick-action" data-action="delete-bulk">
-                            <i class="fas fa-trash-alt nav-icon"></i> 
-                            <span>Delete Bulk Users</span>
-                        </a></li>
-                        <li><a href="#delete-panel" class="nav-submenu-link quick-action" data-action="delete-single">
-                            <i class="fas fa-user-times nav-icon"></i> 
-                            <span>Delete Single User</span>
-                        </a></li>
-                        <li><a href="#modify-panel" class="nav-submenu-link quick-action" data-action="modify">
-                            <i class="fas fa-edit nav-icon"></i> 
-                            <span>Modify Users</span>
-                        </a></li>
-                    </ul>
-                </li>
-            </ul>
-            <div class="sidebar-footer">
-                <a href="settings.html" class="nav-link">
-                    <i class="fas fa-cog nav-icon"></i>
-                    <span>Configuration</span>
+      <!-- Navigation -->
+      <nav class="sidebar" aria-label="Main navigation">
+        <div class="nav-logo">
+          <img src="images/logo.png" alt="Ping Identity Logo" class="nav-logo-img" width="40" height="40">
+        </div>
+        <ul class="nav-menu">
+          <li class="nav-item">
+            <a href="index.html" class="nav-link active" aria-current="page">
+              <i class="fas fa-users nav-icon" aria-hidden="true"></i>
+              <span>User Management</span>
+            </a>
+          </li>
+          <li class="nav-item nav-dropdown">
+            <button type="button" class="nav-link nav-dropdown-toggle" id="quick-actions-toggle" aria-expanded="false" aria-controls="quick-actions-menu">
+              <i class="fas fa-bolt nav-icon" aria-hidden="true"></i>
+              <span>Quick Actions</span>
+              <i class="fas fa-chevron-down nav-arrow" aria-hidden="true"></i>
+            </button>
+            <ul class="nav-submenu" id="quick-actions-menu" aria-labelledby="quick-actions-toggle">
+              <li class="nav-submenu-item">
+                <a href="#import-panel" class="nav-submenu-link quick-action" data-action="import">
+                  <i class="fas fa-upload nav-icon" aria-hidden="true"></i>
+                  <span>Import Users</span>
                 </a>
-            </div>
-        </nav>
+              </li>
+              <li class="nav-submenu-item">
+                <a href="#delete-panel" class="nav-submenu-link quick-action" data-action="delete-bulk">
+                  <i class="fas fa-trash-alt nav-icon" aria-hidden="true"></i>
+                  <span>Delete Bulk Users</span>
+                </a>
+              </li>
+              <li class="nav-submenu-item">
+                <a href="#delete-panel" class="nav-submenu-link quick-action" data-action="delete-single">
+                  <i class="fas fa-user-times nav-icon" aria-hidden="true"></i>
+                  <span>Delete Single User</span>
+                </a>
+              </li>
+              <li class="nav-submenu-item">
+                <a href="#modify-panel" class="nav-submenu-link quick-action" data-action="modify">
+                  <i class="fas fa-edit nav-icon" aria-hidden="true"></i>
+                  <span>Modify Users</span>
+                </a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+        <div class="sidebar-footer">
+          <a href="settings.html" class="nav-link">
+            <i class="fas fa-cog nav-icon" aria-hidden="true"></i>
+            <span>Configuration</span>
+          </a>
+        </div>
+      </nav>
 
-        <!-- Main Content -->
-        <main class="main-content">
+        <!-- Debug Panel (temporary) -->
+    <div id="debug-panel" style="position: fixed; bottom: 0; right: 0; background: #f8f9fa; padding: 10px; border: 1px solid #ddd; z-index: 1000; max-width: 400px; max-height: 200px; overflow: auto;">
+        <h4>Debug Panel</h4>
+        <div id="debug-status">Status: Ready</div>
+        <div id="debug-file">No file selected</div>
+        <button id="debug-btn" class="btn btn-sm btn-secondary">Test Import</button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
             <h1>User Management</h1>
 
             <!-- CSV File Selection Section -->
@@ -90,6 +110,15 @@
                         <label for="csv-file">Choose CSV File</label>
                         <input type="file" id="csv-file" accept=".csv" class="file-input input-50char"
                                data-tippy-content="Select a CSV file containing user data for import, modify, or delete operations.">
+                    </div>
+                    
+                    <!-- Selected File Information -->
+                    <div id="selected-file-info" class="file-info-box">
+                        <div class="no-file-selected">
+                            <i class="fas fa-file-import"></i>
+                            <p>No file selected</p>
+                            <p class="hint">Upload a CSV file to get started</p>
+                        </div>
                     </div>
 
                     <!-- Current File Status -->
@@ -139,10 +168,16 @@
                     </div>
 
                     <div class="import-controls">
-                        <button id="import-btn" class="btn-pill">
-                            Import Users
-                            <span class="tooltip-icon" data-tippy-content="Starts the user import process using the selected CSV file.">i</span>
-                        </button>
+                        <div style="position: relative; border: 2px solid #f0ad4e; border-radius: 5px; padding: 10px; margin: 10px 0;">
+                            <div style="position: absolute; top: -10px; left: 10px; background: #f0ad4e; color: white; padding: 0 5px; border-radius: 3px; font-size: 10px;">DEBUG</div>
+                            <button id="import-btn" class="btn-pill" style="border: 2px solid #d9534f; padding: 8px 16px; font-weight: bold;">
+                                <i class="fas fa-upload"></i>
+                                Import Users
+                            </button>
+                            <div id="import-debug" style="font-size: 12px; color: #d9534f; margin-top: 5px;">
+                                Status: <span id="import-status-debug">Ready</span>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Import Status -->
@@ -184,16 +219,80 @@
                         <div id="modify-error-details" class="error-details hidden"></div>
                     </div>
 
+                    <!-- User Attributes Preview -->
+                    <div id="modify-preview" class="hidden">
+                        <h4>User Attributes to be Modified:</h4>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr id="modify-headers">
+                                        <!-- Headers will be inserted here by JavaScript -->
+                                    </tr>
+                                </thead>
+                                <tbody id="modify-records">
+                                    <!-- Records will be inserted here by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="pagination-controls">
+                            <button id="modify-prev-page" class="btn-small" disabled>Previous</button>
+                            <span id="modify-page-info">Page 1</span>
+                            <button id="modify-next-page" class="btn-small" disabled>Next</button>
+                        </div>
+                    </div>
+
                     <div class="info-box">
                         <h4>CSV Format for Modifications:</h4>
-                        <ul>
-                            <li><strong>userId</strong> - PingOne User ID (required if no username)</li>
-                            <li><strong>username</strong> - Username (required if no userId)</li>
-                            <li><strong>email</strong> - Email address</li>
-                            <li><strong>firstName/givenName</strong> - First name</li>
-                            <li><strong>lastName/familyName</strong> - Last name</li>
-                            <li><strong>enabled</strong> - true/false to enable/disable user</li>
-                        </ul>
+                        <p>Your CSV file should include the following columns (at least one identifier is required):</p>
+                        <table class="attribute-table">
+                            <thead>
+                                <tr>
+                                    <th>Attribute</th>
+                                    <th>Type</th>
+                                    <th>Required</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>userId</code></td>
+                                    <td>String</td>
+                                    <td>Required*</td>
+                                    <td>PingOne User ID (required if no username)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>username</code></td>
+                                    <td>String</td>
+                                    <td>Required*</td>
+                                    <td>Username (required if no userId)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>email</code></td>
+                                    <td>String</td>
+                                    <td>Optional</td>
+                                    <td>Email address</td>
+                                </tr>
+                                <tr>
+                                    <td><code>firstName</code>/<code>givenName</code></td>
+                                    <td>String</td>
+                                    <td>Optional</td>
+                                    <td>First name (either format accepted)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>lastName</code>/<code>familyName</code></td>
+                                    <td>String</td>
+                                    <td>Optional</td>
+                                    <td>Last name (either format accepted)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>enabled</code></td>
+                                    <td>Boolean</td>
+                                    <td>Optional</td>
+                                    <td>Set to 'true' or 'false' to enable/disable user</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p class="note">* At least one identifier (userId or username) is required for each record.</p>
                     </div>
                 </div>
             </section>
@@ -290,9 +389,23 @@
     </div>
 
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="footer" role="contentinfo">
         <div class="footer-content">
-            <p>Built with Ping Identity APIs</p>
+            <div class="footer-logo">
+                <img src="images/logo.png" alt="Ping Identity" class="footer-logo-img" width="120" height="40">
+            </div>
+            <nav class="footer-links" aria-label="Footer navigation">
+                <ul class="footer-links-list">
+                    <li><a href="#" class="footer-link">Terms of Service</a></li>
+                    <li><span class="footer-separator" aria-hidden="true">|</span></li>
+                    <li><a href="#" class="footer-link">Privacy Policy</a></li>
+                    <li><span class="footer-separator" aria-hidden="true">|</span></li>
+                    <li><a href="#" class="footer-link">Support</a></li>
+                </ul>
+            </nav>
+            <div class="footer-copyright">
+                &copy; <span id="current-year">2023</span> Ping Identity. All rights reserved.
+            </div>
         </div>
     </footer>
 
@@ -305,11 +418,260 @@
         </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://unpkg.com/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
-    <script src="https://unpkg.com/tippy.js@6.3.7/dist/tippy.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <script src="js/utils.js?v=1750601575068"></script>
-    <script src="js/main.js?v=1750601575068"></script>
+    <!-- External JavaScript (load synchronously in correct order) -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" integrity="sha512-6UofPqm0QupIL0kzS/UIzekR73/luZdC6i/kXDbWnLOJoqwklBK6519iUnShaYceJ0y4FaiPtX/hRnV/X/xlUQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.5.0/dist/axios.min.js"></script>
+    <!-- Tippy.js -->
+    <script src="https://unpkg.com/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js"></script>
+    
+    <!-- Application Scripts (order matters) -->
+    <script src="js/utils.js"></script>
+    <script>
+        // Initialize utils before anything else
+        document.addEventListener('DOMContentLoaded', function() {
+            // Create and initialize utils
+            window.utils = new Utils();
+            window.utils.init().then(() => {
+                console.log('Utils initialized successfully');
+            }).catch(error => {
+                console.error('Failed to initialize utils:', error);
+            });
+        });
+    </script>
+    <script src="js/main.js"></script>
+    
+    <!-- Initialize the application -->
+    <script>
+    // Function to initialize the application
+    function initApplication() {
+        console.log('=== APPLICATION INITIALIZATION STARTED ===');
+        
+        // Debug elements
+        const debugStatus = document.getElementById('debug-status');
+        const debugFile = document.getElementById('debug-file');
+        const debugBtn = document.getElementById('debug-btn');
+        const importBtn = document.getElementById('import-btn');
+        const fileInput = document.getElementById('csv-file');
+        
+        // Initialize debug status
+        if (debugStatus) {
+            debugStatus.textContent = 'Initializing application...';
+        }
+        
+        // Log loaded dependencies
+        console.log('Loaded dependencies:', {
+            Popper: typeof Popper !== 'undefined',
+            axios: typeof axios !== 'undefined',
+            tippy: typeof tippy !== 'undefined',
+            utils: typeof window.utils !== 'undefined',
+            MainPage: typeof MainPage !== 'undefined'
+        });
+        
+        // Check for required elements
+        if (!importBtn) {
+            const errorMsg = 'Error: Import button not found in the DOM';
+            console.error(errorMsg);
+            if (debugStatus) debugStatus.textContent = errorMsg;
+            return;
+        }
+        
+        if (!fileInput) {
+            const errorMsg = 'Error: File input not found in the DOM';
+            console.error(errorMsg);
+            if (debugStatus) debugStatus.textContent = errorMsg;
+            return;
+        }
+        
+        // Check for required dependencies
+        if (typeof window.utils === 'undefined' || !(window.utils instanceof Utils)) {
+            const errorMsg = 'Error: Utils not properly initialized. Check console for details.';
+            console.error('Utils not properly initialized');
+            if (debugStatus) debugStatus.textContent = errorMsg;
+            return;
+        }
+        
+        if (typeof MainPage === 'undefined') {
+            const errorMsg = 'Error: MainPage class not defined. Check main.js for errors.';
+            console.error('MainPage class is not defined');
+            if (debugStatus) debugStatus.textContent = errorMsg;
+            return;
+        }
+        
+        try {
+            // Initialize the main application
+            console.log('Creating MainPage instance...');
+            window.mainPage = new MainPage();
+            console.log('MainPage instance created:', window.mainPage);
+            
+            // Verify importUsers method is available
+            if (typeof window.mainPage.importUsers !== 'function') {
+                throw new Error('importUsers method not found on MainPage instance');
+            }
+            console.log('importUsers method is available on mainPage instance');
+            
+            // Set up file input change handler
+            fileInput.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    const file = e.target.files[0];
+                    console.log('File selected:', file.name);
+                    if (debugFile) {
+                        debugFile.textContent = `File: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                    }
+                    if (debugStatus) {
+                        debugStatus.textContent = 'File selected - ready to import';
+                    }
+                    importBtn.disabled = false;
+                } else {
+                    console.log('No file selected');
+                    if (debugFile) debugFile.textContent = 'No file selected';
+                    if (debugStatus) debugStatus.textContent = 'No file selected';
+                    importBtn.disabled = true;
+                }
+            });
+            
+            // Set up import button click handler
+            importBtn.addEventListener('click', function(e) {
+                console.log('=== IMPORT BUTTON CLICKED ===');
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    console.log('Processing file:', file.name);
+                    if (debugStatus) {
+                        debugStatus.textContent = `Processing file: ${file.name}`;
+                    }
+                    // Call the import functionality
+                    window.mainPage.importUsers(file);
+                } else {
+                    console.log('No file selected');
+                    if (debugStatus) {
+                        debugStatus.textContent = 'Error: Please select a file first';
+                    }
+                    alert('Please select a CSV file first');
+                }
+            });
+            
+            // Set up debug button click handler if it exists
+            if (debugBtn) {
+                debugBtn.addEventListener('click', function() {
+                    console.log('=== DEBUG BUTTON CLICKED ===');
+                    if (debugStatus) {
+                        debugStatus.textContent = 'Debug: Testing import functionality...';
+                    }
+                    
+                    if (fileInput.files.length > 0) {
+                        const fileName = fileInput.files[0].name;
+                        console.log('Debug - File selected:', fileName);
+                        if (debugStatus) {
+                            debugStatus.textContent = `Debug: Testing with file - ${fileName}`;
+                        }
+                    } else {
+                        console.log('Debug - No file selected');
+                        if (debugStatus) debugStatus.textContent = 'Debug: No file selected';
+                    }
+                });
+            }
+            
+            // Initial debug status
+            if (debugStatus) debugStatus.textContent = 'Ready - select a file to begin';
+            console.log('=== APPLICATION INITIALIZATION COMPLETE ===');
+            
+        } catch (error) {
+            console.error('Error during application initialization:', error);
+            if (debugStatus) {
+                debugStatus.textContent = `Initialization error: ${error.message}`;
+            }
+        }
+    }
+    
+    // Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize the application when the page is fully loaded
+        if (window.utils && window.utils.init) {
+            window.utils.init().then(() => {
+                initApplication();
+            }).catch(error => {
+                console.error('Failed to initialize utils:', error);
+                const debugStatus = document.getElementById('debug-status');
+                if (debugStatus) {
+                    debugStatus.textContent = `Error initializing application: ${error.message}`;
+                }
+            });
+        } else {
+            console.error('Utils not available');
+            const debugStatus = document.getElementById('debug-status');
+            if (debugStatus) {
+                debugStatus.textContent = 'Error: Application utilities not loaded';
+            }
+        }
+    });
+    </script>
+                        }
+                        
+                        // Use the mainPage instance to trigger import
+                        if (window.mainPage && typeof window.mainPage.importUsers === 'function') {
+                            console.log('Calling mainPage.importUsers()...');
+                            window.mainPage.importUsers().catch(error => {
+                                console.error('Import error:', error);
+                                if (debugStatus) {
+                                    debugStatus.textContent = `Error: ${error.message}`;
+                                }
+                            });
+                        } else {
+                            const errorMsg = 'mainPage.importUsers is not a function';
+                            console.error(errorMsg);
+                            if (debugStatus) debugStatus.textContent = errorMsg;
+                        }
+                    } else {
+                        console.log('Debug - No file selected');
+                        if (debugStatus) debugStatus.textContent = 'Debug: Please select a file first';
+                    }
+                });
+            }
+            
+            // Initial debug status
+            if (debugStatus) debugStatus.textContent = 'Ready - select a file to begin';
+            console.log('=== APPLICATION INITIALIZATION COMPLETE ===');
+            
+        } catch (error) {
+            console.error('Error during application initialization:', error);
+            if (debugStatus) {
+                debugStatus.textContent = `Initialization error: ${error.message}`;
+            }
+        }
+    });
+    </script>
+        }
+        
+        // Add click handler for debugging
+        importBtn.addEventListener('click', function(e) {
+            console.log('=== IMPORT BUTTON CLICKED ===');
+            console.log('Event target:', e.target);
+            debugStatus.textContent = 'Button clicked - checking file...';
+            
+            if (fileInput && fileInput.files.length > 0) {
+                console.log('File selected:', fileInput.files[0].name);
+                debugStatus.textContent = 'File selected: ' + fileInput.files[0].name;
+            } else {
+                console.log('No file selected');
+                debugStatus.textContent = 'Error: No file selected';
+                alert('Please select a CSV file first');
+            }
+        });
+        
+        // Monitor file input changes
+        if (fileInput) {
+            fileInput.addEventListener('change', function(e) {
+                console.log('File input changed');
+                if (e.target.files.length > 0) {
+                    console.log('File selected:', e.target.files[0].name);
+                    importBtn.disabled = false;
+                    debugStatus.textContent = 'Ready: ' + e.target.files[0].name;
+                } else {
+                    importBtn.disabled = true;
+                    debugStatus.textContent = 'No file selected';
+                }
+            });
+        }
+    });
+    </script>
 </body>
-</html> 
+</html>

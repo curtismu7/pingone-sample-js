@@ -2,70 +2,150 @@ const express = require('express');
 const multer = require('multer');
 const Papa = require('papaparse');
 const axios = require('axios');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
+const { body, param, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const logManager = require('../utils/logManager');
-
-// Import token functions
 const { getWorkerToken } = require('./token');
+
+// Constants
+const UPLOAD_DIR = path.join(os.tmpdir(), 'pingone-uploads');
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_ROWS_PER_REQUEST = 1000;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMIT_MAX = 100; // 100 requests per window
+const REQUEST_TIMEOUT = 30000; // 30 seconds
+
+// Configure rate limiting
+const apiLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
+  message: 'Too many requests, please try again later.'
+});
+
+// Input sanitization middleware
+const sanitizeInput = (req, res, next) => {
+  if (req.body) {
+    Object.keys(req.body).forEach(key => {
+      if (typeof req.body[key] === 'string') {
+        req.body[key] = req.body[key].trim();
+      }
+    });
+  }
+  next();
+};
 
 const router = express.Router();
 const sseConnections = new Map();
 
+// Ensure upload directory exists
+const ensureUploadDir = async () => {
+  try {
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+  } catch (error) {
+    logManager.error('Failed to create upload directory', { error: error.message });
+    throw new Error('Failed to initialize upload directory');
+  }
+};
+
 // Configure multer for file upload
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const uploadDir = path.join(__dirname, '../../uploads');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  destination: async (req, file, cb) => {
+    try {
+      await ensureUploadDir();
+      cb(null, UPLOAD_DIR);
+    } catch (error) {
+      cb(error);
     }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const ext = path.extname(file.originalname);
+    cb(null, `import-${uniqueSuffix}${ext}`);
+  }
 });
+
+// File filter for multer
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['text/csv', 'application/vnd.ms-excel'];
+  const isCSV = file.originalname.toLowerCase().endsWith('.csv');
+  
+  if (allowedTypes.includes(file.mimetype) || isCSV) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only CSV files are allowed'), false);
+  }
+};
 
 const upload = multer({
-    storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only CSV files are allowed'), false);
-        }
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter
+});
+
+/**
+ * @route   GET /api/import/progress/:operationId
+ * @desc    Server-Sent Events endpoint for import progress updates
+ * @access  Private
+ * @param   {string} operationId - The operation ID to track
+ */
+router.get('/progress/:operationId', [
+  param('operationId').isString().notEmpty().withMessage('Operation ID is required')
+], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { operationId } = req.params;
+  
+  // Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'X-Accel-Buffering': 'no' // Disable buffering for nginx
+  });
+
+  // Send initial connection message
+  res.write('data: ' + JSON.stringify({ type: 'connected', message: 'Connected to progress updates' }) + '\n\n');
+
+  // Store the response object
+  sseConnections.set(operationId, res);
+
+  // Remove connection when client closes
+  req.on('close', () => {
+    if (sseConnections.has(operationId)) {
+      sseConnections.delete(operationId);
+      logManager.info('SSE connection closed', { operationId });
     }
+  });
 });
 
-// SSE endpoint for progress updates
-router.get('/progress/:operationId', (req, res) => {
-    const { operationId } = req.params;
-    
-    // Set SSE headers
-    res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-    });
-
-    // Store the response object
-    sseConnections.set(operationId, res);
-
-    // Remove connection when client closes
-    req.on('close', () => {
-        sseConnections.delete(operationId);
-    });
-});
-
-// Helper function to send progress updates
+/**
+ * Sends a progress update to the client via SSE
+ * @param {string} operationId - The operation ID
+ * @param {Object} data - Progress data to send
+ */
 function sendProgressUpdate(operationId, data) {
-    const res = sseConnections.get(operationId);
-    if (res) {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const res = sseConnections.get(operationId);
+  if (res && !res.writableEnded) {
+    try {
+      res.write(`data: ${JSON.stringify({
+        ...data,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+    } catch (error) {
+      logManager.error('Failed to send progress update', {
+        operationId,
+        error: error.message
+      });
+      sseConnections.delete(operationId);
     }
+  }
 }
 
 // Test route to verify getWorkerToken is working with environment variables
@@ -105,106 +185,161 @@ router.get('/test-token', async (req, res) => {
     }
 });
 
-// Helper function to clean up uploaded files
-const cleanupFile = (filePath) => {
-    if (filePath && fs.existsSync(filePath)) {
-        try {
-            fs.unlinkSync(filePath);
-        } catch (error) {
-            console.error('Error cleaning up file:', error);
-        }
+/**
+ * Cleans up temporary files
+ * @param {string} filePath - Path to the file to clean up
+ */
+const cleanupFile = async (filePath) => {
+  if (!filePath) return;
+  
+  try {
+    await fs.access(filePath);
+    await fs.unlink(filePath);
+    logManager.debug('Temporary file cleaned up', { filePath });
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      logManager.error('Error cleaning up file', {
+        filePath,
+        error: error.message
+      });
     }
+  }
 };
 
-// Process bulk import
-router.post('/bulk', upload.single('file'), async (req, res) => {
-    const operationId = `import_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
-    logManager.logStructured(`=== Starting bulk import operation: ${operationId} ===`);
-    logManager.info('Bulk import request received', {
-        operationId,
-        file: req.file ? req.file.originalname : 'none',
-        environmentId: req.body.environmentId ? req.body.environmentId.substring(0, 8) + '...' : 'none'
+/**
+ * @route   POST /api/import/bulk
+ * @desc    Process bulk import of users from CSV
+ * @access  Private
+ * @param   {File} file - CSV file containing user data
+ * @param   {string} environmentId - PingOne environment ID
+ * @param   {string} clientId - API client ID
+ * @param   {string} clientSecret - API client secret
+ * @returns {Object} Import results
+ */
+router.post('/bulk', [
+  apiLimiter,
+  sanitizeInput,
+  upload.single('file'),
+  body('environmentId').isString().notEmpty().withMessage('Environment ID is required'),
+  body('clientId').isString().notEmpty().withMessage('Client ID is required'),
+  body('clientSecret').isString().notEmpty().withMessage('Client secret is required')
+], async (req, res) => {
+  // Validate request
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const operationId = `import_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+  const { environmentId, clientId, clientSecret } = req.body;
+  
+  // Log the start of the import
+  logManager.info('Bulk import request received', {
+    operationId,
+    file: req.file ? {
+      originalname: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    } : null,
+    environmentId: environmentId ? `${environmentId.substring(0, 4)}...` : 'none'
+  });
+
+  // Check if file was uploaded
+  if (!req.file) {
+    const error = 'No file uploaded or invalid file type';
+    logManager.error('Bulk import failed: No file', { operationId });
+    return res.status(400).json({ 
+      success: false, 
+      error,
+      code: 'NO_FILE_UPLOADED'
     });
+  }
 
-    if (!req.file) {
-        const error = 'No file uploaded or invalid file type';
-        logManager.error('Bulk import failed: ' + error, { operationId });
-        return res.status(400).json({ 
-            success: false, 
-            error
-        });
-    }
-
-    const { environmentId, clientId, clientSecret } = req.body;
-    if (!environmentId || !clientId || !clientSecret) {
-        const error = 'Missing required parameters: environmentId, clientId, or clientSecret';
-        logManager.error('Bulk import failed: ' + error, { 
-            operationId,
-            hasEnvironmentId: !!environmentId,
-            hasClientId: !!clientId,
-            hasClientSecret: !!clientSecret
-        });
-        cleanupFile(req.file.path);
-        return res.status(400).json({ 
-            success: false, 
-            error
-        });
-    }
-
-    let accessToken;
-    try {
-        logManager.info('Requesting worker token', { operationId });
-        accessToken = await getWorkerToken(environmentId, clientId, clientSecret);
-        logManager.info('Worker token received', { operationId });
-    } catch (error) {
-        const errorMsg = 'Failed to authenticate with PingOne: ' + error.message;
-        logManager.error(errorMsg, { 
-            operationId,
-            error: error.message,
-            stack: error.stack
-        });
-        cleanupFile(req.file.path);
-        return res.status(401).json({ 
-            success: false, 
-            error: errorMsg
-        });
-    }
-
-    // Read and parse the uploaded file
-    logManager.info('Reading and parsing uploaded file', { 
-        operationId,
-        filePath: req.file.path,
-        fileSize: fs.statSync(req.file.path).size
+  // Get authentication token
+  let accessToken;
+  try {
+    logManager.debug('Requesting worker token', { operationId });
+    accessToken = await getWorkerToken(environmentId, clientId, clientSecret);
+    logManager.debug('Worker token received', { operationId });
+  } catch (error) {
+    const errorMsg = 'Failed to authenticate with PingOne';
+    logManager.error(errorMsg, { 
+      operationId,
+      error: error.message,
+      code: error.response?.data?.error || 'AUTH_ERROR',
+      status: error.response?.status
     });
     
-    let parsedData;
-    try {
-        const fileContent = fs.readFileSync(req.file.path, 'utf8');
-        parsedData = Papa.parse(fileContent, {
-            header: true,
-            skipEmptyLines: true,
-            transform: (value, field) => {
-                return value && typeof value === 'string' ? value.trim() : value;
-            }
-        });
-        logManager.info('File parsed successfully', { 
-            operationId,
-            fields: parsedData.meta.fields,
-            rowCount: parsedData.data.length
-        });
-    } catch (error) {
-        const errorMsg = 'Error parsing CSV file: ' + error.message;
-        logManager.error(errorMsg, { 
-            operationId,
-            error: error.message,
-            stack: error.stack
-        });
-        cleanupFile(req.file.path);
-        return res.status(400).json({ 
-            success: false, 
-            error: errorMsg
-        });
+    await cleanupFile(req.file.path);
+    return res.status(401).json({ 
+      success: false, 
+      error: errorMsg,
+      code: 'AUTHENTICATION_FAILED',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+
+  // Read and parse the uploaded file
+  logManager.info('Reading and parsing uploaded file', { 
+    operationId,
+    filePath: req.file.path,
+    fileSize: req.file.size
+  });
+  
+  let parsedData;
+  try {
+    const fileContent = await fs.readFile(req.file.path, 'utf8');
+    
+    // Validate file content size
+    if (fileContent.length > MAX_FILE_SIZE) {
+      throw new Error(`File size exceeds maximum allowed size of ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
     }
+    
+    parsedData = await new Promise((resolve, reject) => {
+      Papa.parse(fileContent, {
+        header: true,
+        skipEmptyLines: true,
+        transform: (value, field) => {
+          return value && typeof value === 'string' ? value.trim() : value;
+        },
+        complete: (results) => {
+          if (results.errors.length > 0) {
+            return reject(new Error(`CSV parse error: ${results.errors[0].message}`));
+          }
+          resolve(results);
+        },
+        error: (error) => reject(error)
+      });
+    });
+    
+    // Validate row count
+    if (parsedData.data.length > MAX_ROWS_PER_REQUEST) {
+      throw new Error(`CSV contains too many rows (max ${MAX_ROWS_PER_REQUEST})`);
+    }
+    
+    logManager.info('File parsed successfully', { 
+      operationId,
+      fields: parsedData.meta.fields,
+      rowCount: parsedData.data.length
+    });
+    
+  } catch (error) {
+    const errorMsg = 'Error parsing CSV file';
+    logManager.error(errorMsg, { 
+      operationId,
+      error: error.message,
+      code: 'CSV_PARSE_ERROR',
+      stack: error.stack
+    });
+    
+    await cleanupFile(req.file.path);
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Failed to parse CSV file',
+      code: 'CSV_PARSE_ERROR',
+      details: error.message
+    });
+  }
 
     // Validate parsed data
     if (!parsedData.meta.fields || parsedData.meta.fields.length === 0) {
@@ -213,10 +348,11 @@ router.post('/bulk', upload.single('file'), async (req, res) => {
             operationId,
             filePath: req.file.path
         });
-        cleanupFile(req.file.path);
+        await cleanupFile(req.file.path);
         return res.status(400).json({ 
             success: false, 
-            error: errorMsg
+            error: errorMsg,
+            code: 'MISSING_HEADERS'
         });
     }
 
@@ -234,10 +370,12 @@ router.post('/bulk', upload.single('file'), async (req, res) => {
             originalRowCount: parsedData.data.length,
             filteredRowCount: 0
         });
-        cleanupFile(req.file.path);
+        await cleanupFile(req.file.path);
         return res.status(400).json({ 
             success: false, 
-            error: errorMsg
+            error: errorMsg,
+            code: 'NO_VALID_DATA',
+            originalRowCount: parsedData.data.length
         });
     }
     
@@ -335,10 +473,11 @@ router.post('/bulk', upload.single('file'), async (req, res) => {
         cleanupFile(req.file.path);
         logManager.debug('Temporary file cleaned up', { operationId, filePath: req.file.path });
     } catch (cleanupError) {
-        logManager.error('Error cleaning up temporary file', {
+        logManager.error('Error during cleanup', {
             operationId,
-            filePath: req.file.path,
-            error: cleanupError.message
+            filePath: req.file?.path,
+            error: cleanupError.message,
+            stack: cleanupError.stack
         });
     }
 
@@ -541,5 +680,35 @@ async function processRecord(record, accessToken, environmentId) {
         };
     }
 }
+
+// Error handling middleware for async routes
+const asyncHandler = fn => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+// Note: asyncHandler is automatically applied to all routes via express-async-handler middleware
+// No need to manually wrap routes here
+
+// Global error handler
+router.use((err, req, res, next) => {
+  logManager.error('Unhandled error in import routes', {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method
+  });
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    code: 'INTERNAL_SERVER_ERROR',
+    requestId: req.id,
+    details: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
 
 module.exports = router;

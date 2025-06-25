@@ -2,43 +2,47 @@
 // This file provides core functionality: authentication, UI management, logging, and API helpers
 // Debugging: Check browser console for detailed operation logs and error messages
 
-class Utils {
-    constructor() {
-        // Token cache to avoid repeated authentication requests
-        // DEBUG: Check this.tokenCache object for current authentication state
-        this.tokenCache = {
-            token: null,
-            expiresAt: null
-        };
-        
-        // Application settings storage
-        // DEBUG: Check this.settings object for current configuration
-        this.settings = {};
-        
-        // Progress simulation state
-        // DEBUG: Check these properties if progress updates aren't working
-        this.progressInterval = null;
-        this.progressSimulationActive = false;
-        
-        // Abort controller for cancelling operations
-        this.currentOperationController = null;
-        
-        // SSE connection for real-time progress
-        this.sseConnection = null;
-        this.currentOperationId = null;
-        
-        // Batch processing state
-        this.batchSize = 5; // Update counters every 5 records
-        this.currentBatch = 0;
-        this.batchCounters = {
-            success: 0,
-            failed: 0,
-            skipped: 0,
-            total: 0
-        };
-        this.batchUpdateTimeout = null;
+// Create and expose the Utils class
+(function() {
+    'use strict';
 
-        this.init();
+    class Utils {
+        constructor() {
+            // Token cache to avoid repeated authentication requests
+            // DEBUG: Check this.tokenCache object for current authentication state
+            this.tokenCache = {
+                token: null,
+                expiresAt: null
+            };
+            
+            // Application settings storage
+            // DEBUG: Check this.settings object for current configuration
+            this.settings = {};
+            
+            // Progress simulation state
+            // DEBUG: Check these properties if progress updates aren't working
+            this.progressInterval = null;
+            this.progressSimulationActive = false;
+            
+            // Abort controller for cancelling operations
+            this.currentOperationController = null;
+            
+            // SSE connection for real-time progress
+            this.sseConnection = null;
+            this.currentOperationId = null;
+            
+            // Batch processing state
+            this.batchSize = 5; // Update counters every 5 records
+            this.currentBatch = 0;
+            this.batchCounters = {
+                success: 0,
+                failed: 0,
+                skipped: 0,
+                total: 0
+            };
+            this.batchUpdateTimeout = null;
+
+            this.init();
     }
 
     async init() {
@@ -149,19 +153,32 @@ class Utils {
                 body: JSON.stringify({ environmentId, clientId, clientSecret })
             });
 
-            const data = await response.json();
+            let data;
+            const contentType = response.headers.get('content-type');
+            
+            try {
+                // Try to parse as JSON first
+                data = await response.json();
+            } catch (e) {
+                // If not JSON, read as text and handle rate limit message
+                const text = await response.text();
+                if (response.status === 429) {
+                    throw new Error(`Rate limit exceeded: ${text || 'Too many requests'}`);
+                }
+                throw new Error(text || 'Invalid response from server');
+            }
 
             if (!response.ok) {
                 this.log(`Credentials test failed: ${response.status}`, 'error', data);
-                throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+                throw new Error(data?.error || `HTTP ${response.status}: ${response.statusText}`);
             }
 
-            if (data.success) {
+            if (data?.success) {
                 this.log('Credentials test successful', 'info', data.data);
                 return data;
             } else {
                 this.log('Credentials test failed', 'error', data);
-                throw new Error(data.error || 'Unknown error during credentials test');
+                throw new Error(data?.error || 'Unknown error during credentials test');
             }
             
         } catch (error) {
@@ -411,57 +428,88 @@ class Utils {
     // DEBUG: Check browser console and server logs for detailed operation tracking
     // ============================================================================
 
-    log(message, level = 'info', data = null) {
+    async log(message, level = 'info', data = null) {
         // Enhanced logging with structured data and server logging
         // DEBUG: All application logs go through this function
         const timestamp = new Date().toISOString();
+        const logLevel = level.toUpperCase();
         const logEntry = {
             timestamp,
-            level: level.toUpperCase(),
-            message,
-            data: data || {},
-            url: window.location.pathname,
-            userAgent: navigator.userAgent.substring(0, 100)
+            level: logLevel,
+            message: typeof message === 'string' ? message : JSON.stringify(message),
+            data: data || {}
         };
-
-        // Console logging with appropriate level
-        switch (level.toLowerCase()) {
-            case 'error':
-                console.error(`[${timestamp}] ERROR: ${message}`, data);
-                break;
-            case 'warn':
-                console.warn(`[${timestamp}] WARN: ${message}`, data);
-                break;
-            case 'debug':
-                console.debug(`[${timestamp}] DEBUG: ${message}`, data);
-                break;
-            default:
-                console.log(`[${timestamp}] INFO: ${message}`, data);
+        
+        // Always log to console in development, only errors in production
+        const isDev = window.location.hostname === 'localhost' || 
+                     window.location.hostname.startsWith('127.0.0.1') ||
+                     window.location.hostname === '';
+        
+        // Use appropriate console method based on level
+        const consoleMethod = console[logLevel.toLowerCase()] || console.log;
+        consoleMethod(`[${logLevel}] ${message}`, data || '');
+        
+        // Only try to send logs to server if we're not in development
+        if (isDev) {
+            return false;
         }
 
-        // Send to server for persistent logging (async, non-blocking)
-        if (level === 'error' || level === 'warn') {
-            this.sendLogToServer(logEntry).catch(err => {
-                console.warn('Failed to send log to server:', err);
-            });
-        }
-    }
-
-    async sendLogToServer(logEntry) {
-        // Send log entries to server for persistent storage
-        // DEBUG: Check server logs endpoint if client logs aren't appearing
         try {
-            await fetch('/api/logs', {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+            
+            const response = await fetch('/api/logs', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(logEntry)
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest' // For CSRF protection
+                },
+                body: JSON.stringify(logEntry),
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                // Don't log 429 (Too Many Requests) errors to avoid spamming
+                if (response.status !== 429) {
+                    console.warn(`Log server responded with status ${response.status}`);
+                }
+                return false;
+            }
+            
+            return true;
         } catch (error) {
-            // Don't log this error to avoid infinite loops
-            console.warn('Failed to send log to server:', error);
+            // Don't log aborted requests or network errors to avoid console spam
+            if (error.name !== 'AbortError' && !error.message.includes('Failed to fetch')) {
+                console.warn('Failed to send log to server (non-critical):', error.message);
+            }
+            return false;
         }
     }
-
+    
+    clearCredentials() {
+        // Clear stored credentials from both new and legacy storage keys
+        // DEBUG: Check browser's Application tab to verify keys are removed
+        try {
+            // Remove both current and legacy storage keys
+            localStorage.removeItem('pingone-settings');
+            localStorage.removeItem('pingone_credentials');
+            
+            this.log('Credentials cleared from localStorage', 'info');
+            return true;
+        } catch (error) {
+            console.error('Error clearing credentials:', error);
+            return false;
+        }
+    }
+    
+    // ============================================================================
+    // LOGGING SYSTEM
+    // These functions provide structured logging for debugging and monitoring
+    // DEBUG: Check browser console and server logs for detailed operation tracking
+    // ============================================================================
+    
     // ============================================================================
     // MODAL SYSTEM
     // These functions handle popup dialogs and user notifications
@@ -1545,16 +1593,23 @@ class Utils {
             }, 500);
         }, 5000);
     }
-}
+    
+    // Add any additional utility methods here
+    
+} // End of Utils class
 
-// Initialize utils when DOM is loaded
-// DEBUG: If utils aren't available globally, check this initialization
-document.addEventListener('DOMContentLoaded', () => {
-    window.utils = new Utils();
-    console.log('Utils initialized and available globally as window.utils');
-});
+// Export the Utils class to window
+window.Utils = Utils;
 
-// Export for module usage
+// Create and expose the utils instance
+window.utils = new Utils();
+
+// Log initialization
+console.log('Utils initialized and available globally as window.utils and window.Utils');
+
+})(); // End of IIFE
+
+// Export for Node.js/CommonJS if needed
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Utils;
-} 
+}

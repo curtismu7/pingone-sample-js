@@ -179,5 +179,5 @@ Thumbs.db
 uploads/
 
 # Test files
-*.test.js
+# *.test.js
 *.spec.js 
