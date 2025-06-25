@@ -332,11 +332,71 @@ router.post('/test', tokenLimiter, validateTokenTest, async (req, res) => {
     }
 });
 
+// Worker token endpoint
+router.post('/worker', tokenLimiter, async (req, res) => {
+    try {
+        const { environmentId, clientId, clientSecret } = req.body;
+        
+        if (!environmentId || !clientId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required parameters: environmentId and clientId are required',
+                required: ['environmentId', 'clientId']
+            });
+        }
+
+        // Get the worker token using the existing function
+        const token = await getWorkerToken(environmentId, clientId, clientSecret);
+        
+        // Get the token data from cache
+        const cacheKey = createCacheKey(environmentId, clientId);
+        const tokenData = tokenCache[cacheKey];
+        
+        if (!tokenData) {
+            throw new Error('Token was generated but not found in cache');
+        }
+
+        // Calculate time until expiration
+        const expiresIn = Math.floor((tokenData.expiresAt - Date.now()) / 1000);
+        
+        logManager.info('Worker token issued', { 
+            environmentId: environmentId.substring(0, 8) + '...',
+            clientId: clientId.substring(0, 8) + '...',
+            expiresIn: expiresIn + 's'
+        });
+
+        // Return the token and expiration info
+        res.json({
+            success: true,
+            data: {
+                access_token: token,
+                token_type: 'Bearer',
+                expires_in: expiresIn,
+                expires_at: tokenData.expiresAt,
+                cached: true
+            }
+        });
+        
+    } catch (error) {
+        logManager.error('Failed to issue worker token', { 
+            error: error.message,
+            stack: error.stack 
+        });
+        
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get worker token',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
 // Export the router and functions
 module.exports = {
     router,
     getWorkerToken,
     tokenCache,
     isTokenValid,
-    createCacheKey
+    createCacheKey,
+    tokenLimiter
 };

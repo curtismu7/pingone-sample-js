@@ -299,8 +299,15 @@ router.post('/bulk', [
       Papa.parse(fileContent, {
         header: true,
         skipEmptyLines: true,
+        delimiter: ',',  // Explicitly set delimiter to comma
+        quoteChar: '"', // Explicitly set quote character
+        escapeChar: '"', // Explicitly set escape character
         transform: (value, field) => {
           return value && typeof value === 'string' ? value.trim() : value;
+        },
+        transformHeader: (header) => {
+          // Clean up header names
+          return header ? header.trim().replace(/^"|"$/g, '') : '';
         },
         complete: (results) => {
           if (results.errors.length > 0) {
