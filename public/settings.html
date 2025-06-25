@@ -248,15 +248,29 @@
                 <div class="group-content">
                     <form id="logging-form" class="form compact-form">
                         <div class="form-group">
+                            <div class="form-group">
+                                <label for="log-file-path" class="with-tooltip">
+                                    Log File Location
+                                    <span class="tooltip-icon" data-tippy-content="Select where to save the log file on the server.">i</span>
+                                </label>
+                                <div class="input-with-button">
+                                    <input type="text" id="log-file-path" class="form-control" placeholder="Select directory..." readonly>
+                                    <button type="button" id="browse-button" class="btn btn-secondary">Browse</button>
+                                    <input type="file" id="log-file-picker" style="display: none;" webkitdirectory directory>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
                             <label for="log-file-name" class="with-tooltip">
                                 Log Filename
-                                <span class="tooltip-icon" data-tippy-content="The name of the file to write logs to on the server.">i</span>
+                                <span class="tooltip-icon" data-tippy-content="The name of the log file (must end with .log)">i</span>
                             </label>
                             <div class="input-with-button">
                                 <input type="text" id="log-file-name" name="logFileName" class="input-30char" 
                                        value="import-status.log" placeholder="import-status.log">
-                                <button type="button" id="update-log-file" class="btn-small" title="Update log file name">
-                                    <i class="fas fa-save"></i>
+                                <button type="button" id="update-log-file" class="btn-small" title="Update log file location">
+                                    <i class="fas fa-save"></i> Save
                                 </button>
                             </div>
                         </div>
