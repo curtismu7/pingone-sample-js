@@ -695,6 +695,53 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     margin: 0 auto 1rem auto;
 }
 
+/* Advanced Section Styles */
+.advanced-section {
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.advanced-header {
+    background-color: var(--ping-blue-secondary);
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.2s;
+}
+
+.advanced-header:hover {
+    background-color: #d0e0f0;
+}
+
+.advanced-header h4 {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ping-blue-deep);
+}
+
+.advanced-header i {
+    transition: transform 0.2s;
+    color: var(--ping-blue-deep);
+}
+
+.advanced-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+    padding: 0 1rem;
+}
+
+.advanced-content.show {
+    max-height: 500px; /* Adjust based on content height */
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+}
+
 /* Hide Records Per Page - No longer needed */
 .import-controls .form-group:has(#records-per-page) {
     display: none;

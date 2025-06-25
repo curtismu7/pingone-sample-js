@@ -147,7 +147,7 @@ class LogManager {
             console.log(`File logging started: ${this.config.logFile}`);
             
             // Add a test message to the log file
-            this.logger.info('*** Test *** - Logging started successfully');
+            this.logger.info('*** Logging Started ****\n');
             return true;
         } catch (error) {
             console.error('Failed to start file logging:', error);
