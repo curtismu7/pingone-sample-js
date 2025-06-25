@@ -20,6 +20,7 @@ const MAX_LOG_ENTRIES = 10000; // Maximum number of log entries to keep in memor
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
 const REQUEST_TIMEOUT = 10000; // 10 seconds timeout for file operations
+const logsDir = path.join(__dirname, '../logs');
 
 /**
  * Async handler wrapper to catch async/await errors in route handlers
@@ -802,9 +803,12 @@ router.get('/export', logsLimiter, asyncHandler(async (req, res) => {
  * @returns {Object} Status of the operation
  */
 /**
- * Update log file name
+ * Update log file name and location
  * PUT /api/logs/update-filename
- * Body: { "fileName": "new-filename.log" }
+ * Body: { 
+ *   "fileName": "new-filename.log",
+ *   "directory": "/path/to/directory" (optional)
+ * }
  */
 router.put(
     '/update-filename',
@@ -814,7 +818,11 @@ router.put(
             .trim()
             .notEmpty().withMessage('File name is required')
             .matches(/^[\w\-. ]+$/).withMessage('File name contains invalid characters')
-            .isLength({ max: 255 }).withMessage('File name is too long')
+            .isLength({ max: 255 }).withMessage('File name is too long'),
+        body('directory')
+            .optional({ checkFalsy: true })
+            .isString().withMessage('Directory must be a string')
+            .customSanitizer(value => value.trim())
     ],
     asyncHandler(async (req, res) => {
         // Validate request
@@ -827,9 +835,24 @@ router.put(
             });
         }
 
-        const { fileName } = req.body;
-        const logsDir = path.join(__dirname, '../logs');
-        const newLogPath = path.join(logsDir, fileName);
+        const { fileName, directory } = req.body;
+        
+        // Determine the target directory
+        let targetDir = directory || path.join(__dirname, '../logs');
+        
+        // Ensure the target directory exists and is accessible
+        try {
+            await fsp.mkdir(targetDir, { recursive: true });
+        } catch (error) {
+            console.error('Error creating directory:', error);
+            return res.status(400).json({
+                success: false,
+                error: 'Failed to create or access the specified directory',
+                details: error.message
+            });
+        }
+        
+        const newLogPath = path.join(targetDir, fileName);
 
         try {
             // Ensure logs directory exists
@@ -845,16 +868,42 @@ router.put(
                 });
             }
 
+            // Normalize paths for comparison (resolve relative paths and normalize slashes)
+            const normalizedNewPath = path.normalize(path.resolve(newLogPath));
+            const normalizedCurrentPath = currentLogPath ? path.normalize(path.resolve(currentLogPath)) : null;
+
             // Check if the file already exists
             try {
                 await fsp.access(newLogPath);
+                
+                // If the new path is the same as current path, just return success
+                if (normalizedCurrentPath && normalizedNewPath === normalizedCurrentPath) {
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Log file name is already set to this value',
+                        fileName: path.basename(newLogPath),
+                        filePath: newLogPath,
+                        noChange: true
+                    });
+                }
+                
+                // If it's a different file, return an error
                 return res.status(400).json({
                     success: false,
-                    error: 'A file with this name already exists'
+                    error: 'A file with this name already exists',
+                    details: {
+                        requestedPath: newLogPath,
+                        normalizedRequestedPath: normalizedNewPath,
+                        currentPath: currentLogPath,
+                        normalizedCurrentPath: normalizedCurrentPath
+                    }
                 });
             } catch (error) {
                 // File doesn't exist, which is what we want
-                if (error.code !== 'ENOENT') throw error;
+                if (error.code !== 'ENOENT') {
+                    console.error('Error accessing log file:', error);
+                    throw error;
+                }
             }
 
             // If there's an existing log file, rename it
@@ -870,14 +919,31 @@ router.put(
                 }
             }
 
-            // Update the log manager configuration
+            // Store the current logging state
+            const wasLogging = logManager.config.isLogging;
+            
+            // Stop logging if it's currently active
+            if (wasLogging) {
+                await logManager.stopFileLogging();
+            }
+            
+            // Update the log manager configuration with the full path
             logManager.config.logFile = newLogPath;
+            
+            // Recreate the logger with the new configuration
+            logManager.logger = logManager.createLogger();
+            
+            // Restart logging if it was active
+            if (wasLogging) {
+                await logManager.startFileLogging();
+            }
 
             return res.status(200).json({
                 success: true,
                 message: 'Log file name updated successfully',
                 fileName,
-                filePath: newLogPath
+                filePath: newLogPath,
+                loggingRestarted: wasLogging
             });
 
         } catch (error) {

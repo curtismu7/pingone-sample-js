@@ -14,31 +14,59 @@ class SettingsPage {
         return document.getElementById('environment-id') !== null;
     }
 
+    getUpdateCurrentLogDisplayFunction() {
+        return (directory, fileName) => {
+            const currentFileDisplay = document.getElementById('current-log-file');
+            if (currentFileDisplay && directory) {
+                const fileNameInput = document.getElementById('log-file-name');
+                const logFileName = fileName || (fileNameInput ? fileNameInput.value.trim() : 'app.log');
+                const fullPath = directory.endsWith('/') ? `${directory}${logFileName}` : `${directory}/${logFileName}`;
+                
+                // Truncate the path for display if it's too long
+                const displayPath = fullPath.length > 45 
+                    ? `...${fullPath.substring(fullPath.length - 42)}` 
+                    : fullPath;
+                    
+                currentFileDisplay.textContent = displayPath;
+                currentFileDisplay.title = fullPath; // Show full path on hover
+            }
+        };
+    }
+
     async init() {
         console.log('SettingsPage.init() started');
         
         try {
+            // Wait for required dependencies
             await this.waitForUtils();
-            console.log('Utils are available');
             await this.waitForDOM();
-            console.log('DOM is ready');
             await this.waitForTippy();
             console.log('Tippy.js is available');
             
-            this.setupEventListeners();
-            this.setupModifyFields();
-            
-            // Load settings but don't auto-start logging
-            await this.loadSettings();
             this.initializeTooltips();
-            this.updateDefaultFileDisplay();
+            this.setupEventListeners();
+            await this.loadSettings();
+            this.setupModifyFields();
             this.initializeLoggingControls();
+            this.setupFilePicker();
             
-            console.log('SettingsPage initialized successfully');
+            // Load initial log file name if available
+            this.updateDefaultFileDisplay();
+            
+            // Update current log file display with initial values
+            const filePathInput = document.getElementById('log-file-path');
+            const fileNameInput = document.getElementById('log-file-name');
+            if (filePathInput && fileNameInput) {
+                const updateCurrentLogDisplay = this.getUpdateCurrentLogDisplayFunction();
+                updateCurrentLogDisplay(
+                    filePathInput.value.trim(), 
+                    fileNameInput.value.trim()
+                );
+            }
         } catch (error) {
             console.error('Error initializing settings page:', error);
             if (window.utils && typeof window.utils.log === 'function') {
-                window.utils.log('Error initializing settings: ' + error.message, 'error');
+                window.utils.log('Error initializing settings page: ' + error.message, 'error');
             }
             
             // Show error to user
@@ -167,7 +195,14 @@ class SettingsPage {
         if (stopLoggingBtn) stopLoggingBtn.addEventListener('click', () => this.toggleLogging(false));
         if (exportLogBtn) exportLogBtn.addEventListener('click', () => this.exportLog());
         if (clearLogBtn) clearLogBtn.addEventListener('click', () => this.clearLog());
-        if (updateLogFileBtn) updateLogFileBtn.addEventListener('click', () => this.updateLogFileName());
+        
+        // Set up log file update button
+        if (updateLogFileBtn) {
+            updateLogFileBtn.addEventListener('click', () => this.updateLogFileName());
+        }
+        
+        // Initialize file picker for log directory selection
+        this.setupFilePicker();
         if (testButton) testButton.addEventListener('click', () => this.testCredentials());
         
         // Handle file input changes
@@ -910,104 +945,292 @@ class SettingsPage {
         }
     }
     
-    // Update log file name
+    // Reset the update button to its default state
+    resetUpdateButton() {
+        const updateBtn = document.getElementById('update-log-file');
+        if (updateBtn) {
+            updateBtn.innerHTML = '<i class="fas fa-save"></i> Save';
+            updateBtn.classList.remove('btn-success', 'btn-error');
+            updateBtn.disabled = false;
+        }
+    }
+    
+    // Setup file picker for directory selection
+    setupFilePicker() {
+        const browseButton = document.getElementById('browse-button');
+        const filePicker = document.getElementById('log-file-picker');
+        const filePathInput = document.getElementById('log-file-path');
+        const fileNameInput = document.getElementById('log-file-name');
+        
+        if (!browseButton || !filePicker || !filePathInput || !fileNameInput) return;
+        
+        // Store the directory handle if using File System Access API
+        this.directoryHandle = null;
+        
+        // Reset update button when directory or filename changes
+        filePathInput.addEventListener('input', () => this.resetUpdateButton());
+        fileNameInput.addEventListener('input', () => this.resetUpdateButton());
+        
+        // Get the update function for current log file display
+        const updateCurrentLogDisplay = this.getUpdateCurrentLogDisplayFunction();
+
+        // Handle browse button click - use mousedown to ensure we have user activation
+        browseButton.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            
+            // Use a small timeout to ensure the click event is properly registered
+            setTimeout(() => {
+                // Use the modern File System Access API if available
+                if ('showDirectoryPicker' in window) {
+                    this.handleModernFilePicker(filePathInput, updateCurrentLogDisplay);
+                } else {
+                    // Fallback to using the file input with webkitdirectory
+                    filePicker.click();
+                }
+            }, 100);
+        });
+        
+        // Handle directory selection with webkitdirectory fallback
+        filePicker.addEventListener('change', (event) => {
+            const files = event.target.files;
+            if (files.length > 0) {
+                try {
+                    // Get the directory path from the first selected file
+                    const filePath = files[0].path;
+                    if (filePath) {
+                        const directoryPath = filePath.substring(0, filePath.lastIndexOf('/') + 1);
+                        
+                        // Update the input field with the selected directory path
+                        filePathInput.value = directoryPath;
+                        
+                        // Update the log file name input field with the default log file name
+                        const fileNameInput = document.getElementById('log-file-name');
+                        if (fileNameInput && !fileNameInput.value) {
+                            fileNameInput.value = 'app.log';
+                        }
+                        
+                        // Update the current log file display
+                        updateCurrentLogDisplay(directoryPath, fileNameInput ? fileNameInput.value : null);
+                    } else {
+                        console.warn('Could not determine directory path from file selection');
+                        this.showSaveFeedback('Could not determine directory path. Please try again.', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error processing directory selection:', error);
+                    this.showSaveFeedback('Error processing directory selection. Please try again.', 'error');
+                }
+                
+                // Reset the file input to allow selecting the same directory again
+                filePicker.value = '';
+            }
+        });
+    }
+    
+    // Handle modern File System Access API for directory selection
+    async handleModernFilePicker(filePathInput, updateCurrentLogDisplay) {
+        try {
+            const directoryHandle = await window.showDirectoryPicker({
+                id: 'logDirectory',
+                mode: 'readwrite',
+                startIn: 'documents'
+            });
+            
+            // If we get here, user has selected a directory
+            // With the File System Access API, we can't get the full path due to security restrictions
+            const dirName = directoryHandle.name;
+            filePathInput.value = dirName;
+            this.directoryHandle = directoryHandle;
+            
+            // Update the log file name input field with the default log file name
+            const fileNameInput = document.getElementById('log-file-name');
+            if (fileNameInput) {
+                if (!fileNameInput.value) {
+                    fileNameInput.value = 'app.log';
+                }
+                // Reset the update button when directory is selected
+                this.resetUpdateButton();
+            }
+            
+            // Update the current log file display
+            updateCurrentLogDisplay(dirName, fileNameInput ? fileNameInput.value : null);
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.error('Error selecting directory:', error);
+                this.showSaveFeedback('Error selecting directory. Please try again.', 'error');
+            }
+        }
+    }
+    
+    // Update log file name and location
     async updateLogFileName() {
         const fileNameInput = document.getElementById('log-file-name');
+        const filePathInput = document.getElementById('log-file-path');
         const currentFileDisplay = document.getElementById('current-log-file');
-        const updateBtn = document.getElementById('update-log-file-btn');
+        const updateBtn = document.getElementById('update-log-file');
         
-        if (!fileNameInput || !currentFileDisplay || !updateBtn) return;
-        
-        const newFileName = fileNameInput.value.trim();
-        
-        // Validate file name
-        if (!newFileName) {
-            if (window.utils && typeof window.utils.showErrorMessage === 'function') {
-                window.utils.showErrorMessage(
-                    'Validation Error',
-                    'Please enter a file name',
-                    { duration: 5000 }
-                );
-            } else {
-                alert('Please enter a file name');
-            }
-            return;
+        if (!fileNameInput || !filePathInput || !currentFileDisplay || !updateBtn) {
+            console.error('Required elements not found:', { 
+                fileNameInput: !!fileNameInput,
+                filePathInput: !!filePathInput,
+                currentFileDisplay: !!currentFileDisplay, 
+                updateBtn: !!updateBtn 
+            });
+            throw new Error('Required UI elements not found');
         }
         
-        // Validate file name format
-        const fileNameRegex = /^[\w\-. ]+$/;
+        const newFileName = fileNameInput.value.trim();
+        let directoryPath = filePathInput.value.trim();
+        
+        // Validate inputs
+        if (!newFileName) {
+            throw new Error('Please enter a file name');
+        }
+        
+        // If using File System Access API, we can't get the full path due to security restrictions
+        // So we'll let the server handle the default directory
+        const isUsingModernAPI = 'showDirectoryPicker' in window && this.directoryHandle;
+        
+        if (!isUsingModernAPI && !directoryPath) {
+            throw new Error('Please select a directory for the log file');
+        }
+        
+        // Validate file name format - allow letters, numbers, spaces, hyphens, underscores, and periods
+        const fileNameRegex = /^[\w\-\s.]+$/;
         if (!fileNameRegex.test(newFileName)) {
-            if (window.utils && typeof window.utils.showErrorMessage === 'function') {
-                window.utils.showErrorMessage(
-                    'Invalid File Name',
-                    'File name can only contain letters, numbers, spaces, hyphens, underscores, and periods',
-                    { duration: 7000 }
-                );
-            } else {
-                alert('Invalid file name. Only letters, numbers, spaces, hyphens, underscores, and periods are allowed.');
-            }
-            return;
+            throw new Error('File name can only contain letters, numbers, spaces, hyphens, underscores, and periods');
+        }
+        
+        // Ensure the file has a .log extension
+        if (!newFileName.endsWith('.log')) {
+            throw new Error('Log file name must end with .log');
         }
         
         // Save original button state
         const originalBtnText = updateBtn.innerHTML;
-        const originalBtnState = updateBtn.disabled;
+        const originalBtnClass = updateBtn.className;
+        updateBtn.disabled = true;
+        updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+        updateBtn.classList.remove('btn-success', 'btn-error');
         
         try {
-            // Update button to show loading state
-            updateBtn.disabled = true;
-            updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+            // Prepare the request data with both directory and filename
+            const requestData = {
+                fileName: newFileName
+            };
+            
+            // Only include directory if we're not using the modern API
+            if (!isUsingModernAPI && directoryPath) {
+                requestData.directory = directoryPath;
+            }
             
             const response = await fetch('/api/logs/update-filename', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
                 },
-                body: JSON.stringify({ fileName: newFileName })
+                body: JSON.stringify(requestData)
             });
             
             const data = await response.json();
             
             if (!response.ok) {
-                throw new Error(data.error || data.message || 'Failed to update log file name');
+                let errorMessage = data.error || data.message || 'Failed to update log file name';
+                if (data.details) {
+                    console.debug('Log file update error details:', data.details);
+                    errorMessage += ` (${typeof data.details === 'string' ? data.details : JSON.stringify(data.details)})`;
+                }
+                throw new Error(errorMessage);
             }
             
-            // Update the UI
-            currentFileDisplay.textContent = newFileName;
-            fileNameInput.value = ''; // Clear the input field
+            // If there was no change needed, show appropriate message and return
+            if (data.noChange) {
+                this.showSaveFeedback(data.message, 'info');
+                return;
+            }
+            
+            // Update the current log file display with full path
+            const fullPath = data.filePath || (directoryPath ? 
+                `${directoryPath}${directoryPath.endsWith('/') ? '' : '/'}${newFileName}` : 
+                newFileName);
+                
+            const displayPath = fullPath.length > 40 
+                ? '...' + fullPath.substring(fullPath.length - 40) 
+                : fullPath;
+                
+            currentFileDisplay.textContent = displayPath;
+            currentFileDisplay.title = fullPath; // Show full path on hover
+            
+            // Update any other elements showing the current log file name
+            const logFileNameElements = document.querySelectorAll('.current-log-file');
+            logFileNameElements.forEach(el => {
+                if (el !== currentFileDisplay) {
+                    el.textContent = displayPath;
+                    el.title = fullPath;
+                }
+            });
             
             // Show success message
-            if (window.utils && typeof window.utils.showSuccessMessage === 'function') {
-                window.utils.showSuccessMessage(
-                    'Log File Name Updated',
-                    'The log file name has been updated successfully.',
-                    { duration: 5000, showCloseButton: true }
-                );
-            } else {
-                alert('Log file name updated successfully');
+            let successMessage = data.message || 'Log file location updated successfully';
+            if (data.loggingRestarted) {
+                successMessage += ' and logging was restarted';
             }
+            
+            this.showSaveFeedback(successMessage, 'success');
+            
+            // Update button to show success state
+            updateBtn.innerHTML = '<i class="fas fa-check"></i> Saved';
+            updateBtn.classList.add('btn-success');
+            updateBtn.disabled = false;
+            
+            // Update the log manager config if it exists
+            if (window.logManager) {
+                window.logManager.config.logFile = fullPath;
+            }
+            
+            // Clear the input fields
+            filePathInput.value = '';
+            fileNameInput.value = '';
             
         } catch (error) {
             console.error('Error updating log file name:', error);
+            let errorMessage = error.message || 'Failed to update log file name';
             
-            // Show error message
+            // Handle specific error cases
+            if (error.message.includes('already exists')) {
+                errorMessage = 'A log file with this name already exists. Please choose a different name.';
+            } else if (error.message.includes('permission denied')) {
+                errorMessage = 'Permission denied. Unable to update log file name.';
+            } else if (error.message.includes('ENOENT')) {
+                errorMessage = 'The specified directory does not exist or is not accessible.';
+            }
+            
+            this.showSaveFeedback(errorMessage, 'error');
+            
+            // Update button to show error state
+            updateBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
+            updateBtn.classList.add('btn-error');
+            updateBtn.disabled = false;
+            
+            // Fallback error handling if showSaveFeedback fails
             if (window.utils && typeof window.utils.showErrorMessage === 'function') {
                 window.utils.showErrorMessage(
                     'Update Failed',
-                    error.message || 'Failed to update log file name. Please try again.',
+                    error.message || 'An error occurred while updating the log file name.',
                     { duration: 10000, showCloseButton: true }
                 );
             } else {
-                alert('Error: ' + (error.message || 'Failed to update log file name'));
+                console.error('Error updating log file:', error);
             }
-        } finally {
-            // Restore button state
-            if (updateBtn) {
-                updateBtn.disabled = originalBtnState;
+            
+            // Always restore button state
+            setTimeout(() => {
+                updateBtn.disabled = false;
                 updateBtn.innerHTML = originalBtnText;
-            }
+                updateBtn.className = originalBtnClass;
+            }, 2000);
         }
     }
     

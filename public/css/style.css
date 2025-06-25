@@ -514,15 +514,76 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 }
 
 /* Input with Button */
-.input-with-button {
+.input-with-button,
+.file-picker-container {
     display: flex;
-    gap: 0.5rem;
+    gap: 8px;
     align-items: center;
+    width: 100%;
 }
 
-.input-with-button input {
+.file-picker-container {
+    margin-bottom: 15px;
+}
+
+.file-picker-container input[type="text"] {
     flex: 1;
-    min-width: 0;
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+.file-picker-container .btn-small {
+    white-space: nowrap;
+}
+
+.file-picker-container .fa-folder-open {
+    margin-right: 4px;
+}
+
+.input-with-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 500px; /* Slightly wider to accommodate both input and button */
+    width: 100%;
+}
+
+.input-with-button input[type="text"] {
+    flex: 1;
+    min-width: 200px; /* Minimum width for the input */
+    box-sizing: border-box;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+/* Ensure the log file path input matches the filename input */
+#log-file-path {
+    flex: 1;
+    min-width: 200px;
+    box-sizing: border-box;
+}
+
+.input-with-button .btn {
+    white-space: nowrap;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    height: auto;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+/* Make sure the button doesn't grow too much */
+#browse-button {
+    min-width: 100px;
+}
+
+/* Ensure the button doesn't overlap the input text */
+.input-with-button input[readonly] {
+    background-color: #f8f9fa;
+    cursor: default;
 }
 
 /* File Display */
