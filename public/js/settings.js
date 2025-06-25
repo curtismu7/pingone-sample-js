@@ -97,54 +97,62 @@ class SettingsPage {
     }
 
     setupEventListeners() {
-        // Auto-save form inputs
+        // Handle form inputs - save immediately on change
         var form = document.getElementById('credentials-form');
         if (form) {
-            // Auto-save on input change for text fields
-            form.querySelectorAll('input[type="text"], input[type="password"], input[type="url"]').forEach(function(input) {
-                input.addEventListener('change', function() { this.saveSetting(input.name, input.value); }.bind(this));
-                input.addEventListener('blur', function() { this.saveSetting(input.name, input.value); }.bind(this));
+            // Save text inputs on change and blur
+            form.querySelectorAll('input[type="text"], input[type="password"], input[type="url"], input[type="number"], textarea, select').forEach(function(input) {
+                input.addEventListener('change', function() { 
+                    this.saveSetting(input.name, input.value); 
+                }.bind(this));
+                input.addEventListener('blur', function() { 
+                    this.saveSetting(input.name, input.value); 
+                }.bind(this));
             }.bind(this));
             
-            // Auto-save on change for checkboxes
-            form.querySelectorAll('input[type="checkbox"]').forEach(function(checkbox) {
-                checkbox.addEventListener('change', function() { this.saveSetting(checkbox.name, checkbox.checked); }.bind(this));
+            // Save checkboxes and radio buttons on change
+            form.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(function(input) {
+                input.addEventListener('change', function() { 
+                    const value = input.type === 'checkbox' ? input.checked : input.value;
+                    this.saveSetting(input.name, value); 
+                }.bind(this));
             }.bind(this));
+
+            // Advanced section toggle
+            const advancedHeader = document.getElementById('advanced-header');
+            if (advancedHeader) {
+                advancedHeader.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    this.toggleAdvancedSection(event);
+                });
+            }
         }
 
         // Logging controls
-        var startLoggingBtn = document.getElementById('start-logging-btn');
-        var stopLoggingBtn = document.getElementById('stop-logging-btn');
-        var exportLogBtn = document.getElementById('export-log-btn');
-        var clearLogBtn = document.getElementById('clear-log-btn');
-        var updateLogFileBtn = document.getElementById('update-log-file');
-
-        if (startLoggingBtn) {
-            startLoggingBtn.addEventListener('click', function() { this.toggleLogging(true); }.bind(this));
-        }
-        if (stopLoggingBtn) {
-            stopLoggingBtn.addEventListener('click', function() { this.toggleLogging(false); }.bind(this));
-        }
-        if (exportLogBtn) {
-            exportLogBtn.addEventListener('click', function() { this.exportLog(); }.bind(this));
-        }
-        if (clearLogBtn) {
-            clearLogBtn.addEventListener('click', function() { this.clearLog(); }.bind(this));
-        }
-        if (updateLogFileBtn) {
-            updateLogFileBtn.addEventListener('click', function() { this.updateLogFileName(); }.bind(this));
-        }
-
-        // Save button
-        const saveButton = document.getElementById('save-settings');
-        if (saveButton) {
-            saveButton.addEventListener('click', () => this.saveAllSettings());
-        }
-
-        // Test credentials button
+        const startLoggingBtn = document.getElementById('start-logging-btn');
+        const stopLoggingBtn = document.getElementById('stop-logging-btn');
+        const exportLogBtn = document.getElementById('export-log-btn');
+        const clearLogBtn = document.getElementById('clear-log-btn');
+        const updateLogFileBtn = document.getElementById('update-log-file');
         const testButton = document.getElementById('test-credentials');
-        if (testButton) {
-            testButton.addEventListener('click', () => this.testCredentials());
+
+        // Set up event listeners for logging controls
+        if (startLoggingBtn) startLoggingBtn.addEventListener('click', () => this.toggleLogging(true));
+        if (stopLoggingBtn) stopLoggingBtn.addEventListener('click', () => this.toggleLogging(false));
+        if (exportLogBtn) exportLogBtn.addEventListener('click', () => this.exportLog());
+        if (clearLogBtn) clearLogBtn.addEventListener('click', () => this.clearLog());
+        if (updateLogFileBtn) updateLogFileBtn.addEventListener('click', () => this.updateLogFileName());
+        if (testButton) testButton.addEventListener('click', () => this.testCredentials());
+        
+        // Handle file input changes
+        const fileInput = document.getElementById('default-file');
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    this.saveSetting('defaultFile', e.target.files[0].name);
+                }
+            });
         }
     }
 
@@ -219,13 +227,70 @@ class SettingsPage {
 
     async saveSetting(key, value) {
         try {
+            // Don't save if key or value is undefined
+            if (key === undefined || value === undefined) {
+                console.warn('Skipping save: key or value is undefined', { key, value });
+                return;
+            }
+            
+            // Log the save action for debugging
+            console.log(`Saving setting: ${key} =`, value);
+            
             // Save setting to local storage or API
             if (window.utils && typeof window.utils.saveSetting === 'function') {
                 await window.utils.saveSetting(key, value);
+                
+                // Show feedback for important settings
+                if (['environmentId', 'clientId', 'baseUrl'].includes(key)) {
+                    this.showSaveFeedback(`Setting saved: ${key}`);
+                }
             }
         } catch (error) {
             console.error('Error saving setting:', error);
+            this.showSaveFeedback(`Error saving ${key}`, 'error');
         }
+    }
+    
+    // Show feedback when settings are saved
+    showSaveFeedback(message, type = 'success') {
+        // Check if we already have a feedback element
+        let feedbackEl = document.getElementById('settings-feedback');
+        
+        if (!feedbackEl) {
+            // Create feedback element if it doesn't exist
+            feedbackEl = document.createElement('div');
+            feedbackEl.id = 'settings-feedback';
+            feedbackEl.style.position = 'fixed';
+            feedbackEl.style.bottom = '20px';
+            feedbackEl.style.right = '20px';
+            feedbackEl.style.padding = '10px 20px';
+            feedbackEl.style.borderRadius = '4px';
+            feedbackEl.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+            feedbackEl.style.zIndex = '1000';
+            feedbackEl.style.transition = 'opacity 0.3s';
+            document.body.appendChild(feedbackEl);
+        }
+        
+        // Set message and style based on type
+        feedbackEl.textContent = message;
+        feedbackEl.style.backgroundColor = type === 'error' ? '#f8d7da' : '#d4edda';
+        feedbackEl.style.color = type === 'error' ? '#721c24' : '#155724';
+        feedbackEl.style.border = `1px solid ${type === 'error' ? '#f5c6cb' : '#c3e6cb'}`;
+        feedbackEl.style.opacity = '1';
+        
+        // Auto-hide after 3 seconds
+        clearTimeout(this.feedbackTimeout);
+        this.feedbackTimeout = setTimeout(() => {
+            if (feedbackEl) {
+                feedbackEl.style.opacity = '0';
+                // Remove element after fade out
+                setTimeout(() => {
+                    if (feedbackEl && document.body.contains(feedbackEl)) {
+                        document.body.removeChild(feedbackEl);
+                    }
+                }, 300);
+            }
+        }, 3000);
     }
 
     async loadSettings() {
@@ -686,6 +751,32 @@ class SettingsPage {
         }
     }
     
+    // Toggle advanced section
+    toggleAdvancedSection(event) {
+        const header = event.currentTarget;
+        const content = document.getElementById('advanced-content');
+        const icon = header.querySelector('i');
+        
+        if (content) {
+            content.classList.toggle('show');
+            
+            // Toggle icon
+            if (icon) {
+                if (content.classList.contains('show')) {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            }
+            
+            // Save the state to localStorage
+            const isExpanded = content.classList.contains('show');
+            localStorage.setItem('advancedSectionExpanded', isExpanded);
+        }
+    }
+
     // Clear log file
     async clearLog() {
         const clearBtn = document.getElementById('clear-log-btn');
