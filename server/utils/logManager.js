@@ -315,6 +315,16 @@ class LogManager {
             ...details
         });
     }
+
+    // Log user actions with metadata
+    logUserAction(userId, action, details = {}) {
+        this.info('USER_ACTION:', {
+            userId,
+            action,
+            timestamp: new Date().toISOString(),
+            ...details
+        });
+    }
 }
 
 // Create a singleton instance

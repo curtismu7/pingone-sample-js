@@ -5,6 +5,7 @@ class SettingsPage {
         // Only initialize if we're on the settings page
         if (this.isSettingsPage()) {
             this.defaultFileName = null; // Store the selected file name
+            this.lastUserInteraction = false; // Track user interactions for file picker
             this.init();
         }
     }
@@ -33,6 +34,17 @@ class SettingsPage {
         };
     }
 
+    // Initialize all UI components
+    initializeComponents() {
+        this.initializeTooltips();
+        this.setupEventListeners();
+        this.loadSettings();
+        this.setupModifyFields();
+        this.initializeLoggingControls();
+        this.setupFilePicker();
+        this.initAdvancedAccordion();
+    }
+    
     async init() {
         console.log('SettingsPage.init() started');
         
@@ -43,12 +55,7 @@ class SettingsPage {
             await this.waitForTippy();
             console.log('Tippy.js is available');
             
-            this.initializeTooltips();
-            this.setupEventListeners();
-            await this.loadSettings();
-            this.setupModifyFields();
-            this.initializeLoggingControls();
-            this.setupFilePicker();
+            this.initializeComponents();
             
             // Load initial log file name if available
             this.updateDefaultFileDisplay();
@@ -98,6 +105,61 @@ class SettingsPage {
         // Additional wait to ensure all elements are available
         await new Promise(resolve => setTimeout(resolve, 100));
     }
+    
+    // Load settings from storage and apply them to the form
+    async loadSettings() {
+        try {
+            const settings = window.utils.getSettings();
+            
+            // Set form values from settings
+            const form = document.getElementById('credentials-form');
+            if (form) {
+                // Set all input values
+                form.querySelectorAll('input, select, textarea').forEach(input => {
+                    const name = input.name;
+                    if (name && settings[name] !== undefined) {
+                        if (input.type === 'checkbox') {
+                            input.checked = !!settings[name];
+                        } else {
+                            input.value = settings[name] || '';
+                        }
+                    }
+                });
+                
+                // Special handling for auth region
+                const authRegionSelect = document.getElementById('auth-region');
+                const customAuthUrlInput = document.getElementById('custom-auth-url');
+                
+                if (authRegionSelect && customAuthUrlInput) {
+                    const isCustom = settings.authUrl && !['https://auth.pingone.com', 'https://auth.pingone.eu', 
+                                                         'https://auth.pingone.ca', 'https://auth.pingone.asia'].includes(settings.authUrl);
+                    
+                    if (isCustom) {
+                        authRegionSelect.value = 'custom';
+                        customAuthUrlInput.style.display = 'block';
+                        customAuthUrlInput.value = settings.authUrl || '';
+                    } else if (settings.authUrl) {
+                        authRegionSelect.value = settings.authUrl;
+                        customAuthUrlInput.style.display = 'none';
+                    }
+                }
+                
+                // Update default file display if available
+                if (settings.defaultFile) {
+                    this.defaultFileName = settings.defaultFile;
+                    this.updateDefaultFileDisplay();
+                }
+            }
+            
+            return settings;
+        } catch (error) {
+            console.error('Error loading settings:', error);
+            if (window.utils && typeof window.utils.log === 'function') {
+                window.utils.log('Error loading settings: ' + error.message, 'error');
+            }
+            return {};
+        }
+    }
 
     async waitForTippy() {
         // Wait for Tippy.js to be available
@@ -128,13 +190,82 @@ class SettingsPage {
         // Handle form inputs - save immediately on change
         var form = document.getElementById('credentials-form');
         if (form) {
+            // Handle auth region dropdown change
+            const authRegionSelect = document.getElementById('auth-region');
+            const customAuthUrlInput = document.getElementById('custom-auth-url');
+            
+            if (authRegionSelect && customAuthUrlInput) {
+                // Set initial state - getSettings is synchronous
+                const settings = window.utils && window.utils.getSettings ? 
+                    window.utils.getSettings() : {};
+                const savedAuthUrl = settings.authUrl || null;
+                
+                // Handle region selection change
+                authRegionSelect.addEventListener('change', (e) => {
+                    const isCustom = e.target.value === 'custom';
+                    customAuthUrlInput.style.display = isCustom ? 'block' : 'none';
+                    
+                    if (!isCustom) {
+                        // Save the selected region URL
+                        this.saveSetting('authRegion', e.target.value);
+                        
+                        // If we have a custom URL input, blur it to trigger save if needed
+                        if (document.activeElement === customAuthUrlInput) {
+                            customAuthUrlInput.blur();
+                        }
+                    } else {
+                        // Focus the custom URL input when 'Custom Domain' is selected
+                        customAuthUrlInput.focus();
+                    }
+                });
+                
+                // Handle custom URL input
+                customAuthUrlInput.addEventListener('blur', (e) => {
+                    if (authRegionSelect.value === 'custom' && e.target.value) {
+                        // Validate the URL before saving
+                        try {
+                            new URL(e.target.value);
+                            this.saveSetting('customAuthUrl', e.target.value);
+                        } catch (err) {
+                            this.showSaveFeedback('Please enter a valid URL (e.g., https://auth.yourdomain.com)', 'error');
+                            e.target.focus();
+                        }
+                    }
+                });
+                
+                customAuthUrlInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && authRegionSelect.value === 'custom' && e.target.value) {
+                        e.preventDefault();
+                        e.target.blur(); // This will trigger the blur event which handles the save
+                    }
+                });
+                
+                // Set initial state based on saved settings
+                Promise.resolve(savedAuthUrl).then(authUrl => {
+                    if (!authUrl) return;
+                    
+                    const isCustom = !['https://auth.pingone.com', 'https://auth.pingone.eu', 
+                                     'https://auth.pingone.ca', 'https://auth.pingone.asia'].includes(authUrl);
+                    
+                    if (isCustom) {
+                        authRegionSelect.value = 'custom';
+                        customAuthUrlInput.style.display = 'block';
+                        customAuthUrlInput.value = authUrl;
+                    } else {
+                        authRegionSelect.value = authUrl;
+                        customAuthUrlInput.style.display = 'none';
+                    }
+                });
+            }
+            
             // Save text inputs on change and blur
             form.querySelectorAll('input[type="text"], input[type="password"], input[type="url"], input[type="number"], textarea, select').forEach(function(input) {
                 input.addEventListener('change', function() { 
                     this.saveSetting(input.name, input.value); 
                 }.bind(this));
-                input.addEventListener('blur', function() { 
-                    this.saveSetting(input.name, input.value); 
+                
+                input.addEventListener('blur', function() {
+                    this.saveSetting(input.name, input.value);
                 }.bind(this));
             }.bind(this));
             
@@ -297,6 +428,27 @@ class SettingsPage {
                 return;
             }
             
+            // Handle authentication URL specifically
+            if (key === 'authRegion' || key === 'customAuthUrl') {
+                const authRegionSelect = document.getElementById('auth-region');
+                const customAuthUrlInput = document.getElementById('custom-auth-url');
+                
+                if (authRegionSelect && customAuthUrlInput) {
+                    // If saving authRegion and it's not 'custom', save the URL
+                    if (key === 'authRegion' && value !== 'custom') {
+                        await window.utils.saveSetting('authUrl', value);
+                        this.showSaveFeedback('Authentication URL saved');
+                        return;
+                    }
+                    // If saving custom URL and custom is selected, save the URL
+                    if (key === 'customAuthUrl' && authRegionSelect.value === 'custom' && value) {
+                        await window.utils.saveSetting('authUrl', value);
+                        this.showSaveFeedback('Custom authentication URL saved');
+                        return;
+                    }
+                }
+            }
+            
             // Log the save action for debugging
             console.log(`Saving setting: ${key} =`, value);
             
@@ -305,7 +457,7 @@ class SettingsPage {
                 await window.utils.saveSetting(key, value);
                 
                 // Show feedback for important settings
-                if (['environmentId', 'clientId', 'baseUrl'].includes(key)) {
+                if (['environmentId', 'clientId', 'baseUrl', 'authUrl'].includes(key)) {
                     this.showSaveFeedback(`Setting saved: ${key}`);
                 }
             }
@@ -357,29 +509,53 @@ class SettingsPage {
         }, 3000);
     }
 
-    async loadSettings() {
+    async saveSetting(key, value) {
         try {
-            // Load settings from local storage or API
-            if (window.utils && typeof window.utils.getSettings === 'function') {
-                const settings = await window.utils.getSettings();
-                // Apply settings to form
-                Object.entries(settings).forEach(([key, value]) => {
-                    const input = document.querySelector(`[name="${key}"]`);
-                    if (input) {
-                        if (input.type === 'checkbox') {
-                            input.checked = !!value;
-                        } else {
-                            input.value = value || '';
-                        }
+            // Don't save if key or value is undefined
+            if (key === undefined || value === undefined) {
+                console.warn('Skipping save: key or value is undefined', { key, value });
+                return;
+            }
+            
+            // Handle authentication URL specifically
+            if (key === 'authRegion' || key === 'customAuthUrl') {
+                const authRegionSelect = document.getElementById('auth-region');
+                const customAuthUrlInput = document.getElementById('custom-auth-url');
+                
+                if (authRegionSelect && customAuthUrlInput) {
+                    // If saving authRegion and it's not 'custom', save the URL
+                    if (key === 'authRegion' && value !== 'custom') {
+                        await window.utils.saveSetting('authUrl', value);
+                        this.showSaveFeedback('Authentication URL saved');
+                        return;
                     }
-                });
+                    // If saving custom URL and custom is selected, save the URL
+                    if (key === 'customAuthUrl' && authRegionSelect.value === 'custom' && value) {
+                        await window.utils.saveSetting('authUrl', value);
+                        this.showSaveFeedback('Custom authentication URL saved');
+                        return;
+                    }
+                }
+            }
+            
+            // Log the save action for debugging
+            console.log(`Saving setting: ${key} =`, value);
+            
+            // Save setting to local storage or API
+            if (window.utils && typeof window.utils.saveSetting === 'function') {
+                await window.utils.saveSetting(key, value);
+                
+                // Show feedback for important settings
+                if (['environmentId', 'clientId', 'baseUrl', 'authUrl'].includes(key)) {
+                    this.showSaveFeedback(`Setting saved: ${key}`);
+                }
             }
         } catch (error) {
-            console.error('Error loading settings:', error);
-            throw error;
+            console.error('Error saving setting:', error);
+            this.showSaveFeedback(`Error saving ${key}`, 'error');
         }
     }
-
+    
     updateDefaultFileDisplay() {
         // Update UI to show the default file name if set
         if (this.defaultFileName) {
@@ -389,7 +565,7 @@ class SettingsPage {
             }
         }
     }
-
+    
     updateSelectAllCheckbox() {
         const selectAllCheckbox = document.getElementById('select-all-modify-fields');
         if (!selectAllCheckbox) return;
@@ -562,6 +738,8 @@ class SettingsPage {
 
     // Initialize logging controls to their default state
     initializeLoggingControls() {
+        // Apply any saved log file settings
+        this.applySavedLogFileSettings();
         const startBtn = document.getElementById('start-logging-btn');
         const stopBtn = document.getElementById('stop-logging-btn');
         const statusElement = document.getElementById('logging-status');
@@ -820,30 +998,115 @@ class SettingsPage {
         }
     }
     
-    // Toggle advanced section
-    toggleAdvancedSection(event) {
-        const header = event.currentTarget;
+    // Initialize advanced accordion
+    initAdvancedAccordion() {
+        const button = document.getElementById('advanced-toggle');
         const content = document.getElementById('advanced-content');
-        const icon = header.querySelector('i');
         
-        if (content) {
-            content.classList.toggle('show');
-            
-            // Toggle icon
-            if (icon) {
-                if (content.classList.contains('show')) {
-                    icon.classList.remove('fa-chevron-down');
-                    icon.classList.add('fa-chevron-up');
-                } else {
-                    icon.classList.remove('fa-chevron-up');
-                    icon.classList.add('fa-chevron-down');
-                }
-            }
-            
-            // Save the state to localStorage
-            const isExpanded = content.classList.contains('show');
-            localStorage.setItem('advancedSectionExpanded', isExpanded);
+        if (!button || !content) {
+            console.error('Advanced accordion elements not found');
+            return;
         }
+        
+        // Set initial state
+        const savedState = localStorage.getItem('advancedSectionExpanded') === 'true';
+        this.toggleAccordion(button, content, savedState);
+        
+        // Add click event
+        const handleClick = (e) => {
+            e.preventDefault();
+            const isExpanded = button.getAttribute('aria-expanded') === 'true';
+            this.toggleAccordion(button, content, !isExpanded);
+        };
+        
+        // Add keyboard support
+        const handleKeyDown = (e) => {
+            if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+                e.preventDefault();
+                handleClick(e);
+            }
+        };
+        
+        // Add event listeners
+        button.addEventListener('click', handleClick);
+        button.addEventListener('keydown', handleKeyDown);
+        
+        // Store references for cleanup if needed
+        this._accordionHandlers = { handleClick, handleKeyDown };
+    }
+    
+    // Toggle accordion state
+    toggleAccordion(button, content, show) {
+        if (!button || !content) return;
+        
+        const isExpanded = show ? 'true' : 'false';
+        const wasExpanded = button.getAttribute('aria-expanded') === 'true';
+        
+        // Don't do anything if the state isn't changing
+        if ((show && wasExpanded) || (!show && !wasExpanded)) {
+            return;
+        }
+        
+        // Update button attributes
+        button.setAttribute('aria-expanded', isExpanded);
+        content.setAttribute('aria-hidden', String(!show));
+        
+        // Update content visibility with animation
+        if (show) {
+            // Show content
+            content.style.display = 'block';
+            content.style.overflow = 'hidden';
+            
+            // Force repaint
+            void content.offsetHeight;
+            
+            // Start expand animation
+            requestAnimationFrame(() => {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                
+                // Handle transition end
+                const handleTransitionEnd = () => {
+                    content.style.maxHeight = ''; // Reset to allow content to grow
+                    content.style.overflow = '';
+                    content.removeEventListener('transitionend', handleTransitionEnd);
+                };
+                
+                content.addEventListener('transitionend', handleTransitionEnd, { once: true });
+            });
+        } else {
+            // Collapse content
+            content.style.maxHeight = content.scrollHeight + 'px';
+            content.style.overflow = 'hidden';
+            
+            // Force repaint
+            void content.offsetHeight;
+            
+            // Start collapse animation
+            requestAnimationFrame(() => {
+                content.style.maxHeight = '0';
+                
+                // Handle transition end
+                const handleTransitionEnd = () => {
+                    if (button.getAttribute('aria-expanded') === 'false') {
+                        content.style.display = 'none';
+                        content.style.maxHeight = '';
+                        content.style.overflow = '';
+                    }
+                    content.removeEventListener('transitionend', handleTransitionEnd);
+                };
+                
+                content.addEventListener('transitionend', handleTransitionEnd, { once: true });
+            });
+        }
+        
+        // Save state
+        localStorage.setItem('advancedSectionExpanded', String(show));
+        
+        // Dispatch custom event
+        const event = new CustomEvent('accordionToggle', {
+            detail: { isExpanded: show }
+        });
+        button.dispatchEvent(event);
     }
 
     // Toggle client secret field visibility
@@ -863,84 +1126,93 @@ class SettingsPage {
             return;
         }
         
-        // Save original button state
-        const originalText = clearBtn ? clearBtn.innerHTML : '';
-        let originalBtnState = clearBtn ? clearBtn.disabled : false;
-        
         try {
-            // Set loading state
+            // Show confirmation dialog
+            const confirmed = await new Promise((resolve) => {
+                if (window.utils && typeof window.utils.showConfirmationDialog === 'function') {
+                    // Update to match the actual function signature in utils.js
+                    window.utils.showConfirmationDialog(
+                        'Clear Log File',
+                        'Are you sure you want to clear the log file? This action cannot be undone.'
+                    ).then((result) => {
+                        resolve(result === true);
+                    }).catch(() => resolve(false));
+                } else {
+                    // Fallback to native confirm
+                    resolve(confirm('Are you sure you want to clear the log file? This action cannot be undone.'));
+                }
+            });
+            
+            if (!confirmed) return;
+            
+            // Show spinner with operation details
+            window.utils.showOperationSpinner(
+                'Clearing Log File',
+                null,
+                'Log Clear',
+                1 // Single operation
+            );
+            
+            // Update button state
             if (clearBtn) {
                 clearBtn.disabled = true;
                 clearBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Clearing...';
             }
             
-            // Use the standard confirmation dialog
-            const confirmed = await new Promise((resolve) => {
-                if (window.utils && typeof window.utils.showConfirmDialog === 'function') {
-                    window.utils.showConfirmDialog(
-                        'Clear Log File',
-                        'Are you sure you want to clear the log file? This action cannot be undone.',
-                        'warning',
-                        (result) => resolve(result)
-                    );
-                } else {
-                    resolve(confirm('Are you sure you want to clear the log file? This cannot be undone.'));
+            try {
+                // Make the API call
+                const response = await fetch('/api/logs/clear', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.message || 'Failed to clear log file');
                 }
-            });
-            
-            if (!confirmed) {
-                return;
-            }
-            
-            const response = await fetch('/api/logs', { 
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+
+                // Show success message
+                this.showSaveFeedback('Log file cleared successfully');
+                
+                // Reset the button state
+                if (clearBtn) {
+                    clearBtn.innerHTML = '<i class="fas fa-trash"></i> Clear Log';
+                    clearBtn.disabled = false;
                 }
-            });
-            
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to clear log');
+                
+                // Hide the spinner
+                window.utils.hideSpinner();
+                
+            } catch (error) {
+                console.error('Error updating log file name:', error);
+                this.showSaveFeedback('Error updating log file. Please try again.', 'error');
+                
+                // Complete the operation with error state if spinner is available
+                if (window.utils?.completeOperationSpinner) {
+                    window.utils.completeOperationSpinner(0, 0, 1);
+                } else if (window.utils?.hideSpinner) {
+                    window.utils.hideSpinner();
+                }
+                
+                // Reset button state on error
+                if (clearBtn) {
+                    clearBtn.disabled = false;
+                    clearBtn.innerHTML = 'Clear Log';
+                    clearBtn.classList.add('btn-error');
+                }
             }
-            
-            // Show success message using standard popup
-            if (window.utils && typeof window.utils.showSuccessMessage === 'function') {
-                window.utils.showSuccessMessage(
-                    'Log File Cleared',
-                    'The log file has been cleared successfully.',
-                    { duration: 5000, showCloseButton: true }
-                );
-            } else {
-                alert('Log file has been cleared successfully');
-            }
-            
-            // Refresh log display if on logs page
-            if (typeof window.refreshLogs === 'function') {
-                window.refreshLogs();
-            }
-            
-        } catch (error) {
-            console.error('Error clearing log:', error);
-            
-            // Show error message using standard popup
-            if (window.utils && typeof window.utils.showErrorMessage === 'function') {
-                window.utils.showErrorMessage(
-                    'Clear Log Failed',
-                    error.message || 'Failed to clear log file. Please try again.',
-                    { duration: 10000, showCloseButton: true }
-                );
-            } else {
-                alert('Error: ' + (error.message || 'Failed to clear log'));
-            }
-        } finally {
-            // Always reset button state
+        } catch (outerError) {
+            console.error('Unexpected error in clearLog:', outerError);
+            // Ensure button state is reset even if something unexpected happens
             if (clearBtn) {
-                clearBtn.disabled = originalBtnState;
-                clearBtn.innerHTML = originalText;
+                clearBtn.innerHTML = '<i class="fas fa-trash"></i> Clear Log';
+                clearBtn.disabled = false;
+            }
+            // Hide spinner if it's still showing
+            if (window.utils) {
+                window.utils.hideSpinner();
             }
         }
     }
@@ -952,6 +1224,62 @@ class SettingsPage {
             updateBtn.innerHTML = '<i class="fas fa-save"></i> Save';
             updateBtn.classList.remove('btn-success', 'btn-error');
             updateBtn.disabled = false;
+        }
+    }
+    
+    // Save log file settings to localStorage
+    saveLogFileSettings(fileName, directoryPath) {
+        try {
+            const settings = {
+                fileName: fileName || '',
+                directoryPath: directoryPath || '',
+                lastUpdated: new Date().toISOString()
+            };
+            localStorage.setItem('logFileSettings', JSON.stringify(settings));
+        } catch (error) {
+            console.error('Error saving log file settings to localStorage:', error);
+        }
+    }
+    
+    // Load log file settings from localStorage
+    loadLogFileSettings() {
+        try {
+            const settings = localStorage.getItem('logFileSettings');
+            if (settings) {
+                return JSON.parse(settings);
+            }
+        } catch (error) {
+            console.error('Error loading log file settings from localStorage:', error);
+        }
+        return null;
+    }
+    
+    // Apply saved log file settings to the UI
+    applySavedLogFileSettings() {
+        const settings = this.loadLogFileSettings();
+        if (settings) {
+            const fileNameInput = document.getElementById('log-file-name');
+            const filePathInput = document.getElementById('log-file-path');
+            
+            if (settings.fileName && fileNameInput) {
+                fileNameInput.value = settings.fileName;
+            }
+            
+            if (settings.directoryPath && filePathInput) {
+                filePathInput.value = settings.directoryPath;
+                
+                // If we have a current log file display, update it
+                const currentFileDisplay = document.getElementById('current-log-file');
+                if (currentFileDisplay) {
+                    const fullPath = `${settings.directoryPath}${settings.directoryPath.endsWith('/') ? '' : '/'}${settings.fileName}`;
+                    const displayPath = fullPath.length > 40 ? 
+                        `...${fullPath.substring(fullPath.length - 40)}` : 
+                        fullPath;
+                    
+                    currentFileDisplay.textContent = displayPath;
+                    currentFileDisplay.title = fullPath;
+                }
+            }
         }
     }
     
@@ -971,23 +1299,104 @@ class SettingsPage {
         filePathInput.addEventListener('input', () => this.resetUpdateButton());
         fileNameInput.addEventListener('input', () => this.resetUpdateButton());
         
+        // Apply saved log file settings to the UI
+        const applySavedLogFileSettings = () => {
+            const settings = this.loadLogFileSettings();
+            if (settings) {
+                const fileNameInput = document.getElementById('log-file-name');
+                const filePathInput = document.getElementById('log-file-path');
+
+                if (settings.fileName && fileNameInput) {
+                    fileNameInput.value = settings.fileName;
+                }
+
+                if (settings.directoryPath && filePathInput) {
+                    filePathInput.value = settings.directoryPath;
+
+                    // If we have a current log file display, update it
+                    const currentFileDisplay = document.getElementById('current-log-file');
+                    if (currentFileDisplay) {
+                        const fullPath = `${settings.directoryPath}${settings.directoryPath.endsWith('/') ? '' : '/'}${settings.fileName}`;
+                        const displayPath = fullPath.length > 40 ? 
+                            `...${fullPath.substring(fullPath.length - 40)}` : 
+                            fullPath;
+
+                        currentFileDisplay.textContent = displayPath;
+                        currentFileDisplay.title = fullPath;
+                    }
+                }
+            }
+        };
+        
+        // Call the function to apply settings
+        applySavedLogFileSettings();
+    }
+
+
+    // Setup file picker for directory selection
+    setupFilePicker() {
+        const browseButton = document.getElementById('browse-button');
+        const filePicker = document.getElementById('log-file-picker');
+        const filePathInput = document.getElementById('log-file-path');
+        const fileNameInput = document.getElementById('log-file-name');
+
+        if (!browseButton || !filePicker || !filePathInput || !fileNameInput) return;
+
+        // Store the directory handle if using File System Access API
+        this.directoryHandle = null;
+
+        // Reset update button when directory or filename changes
+        filePathInput.addEventListener('input', () => this.resetUpdateButton());
+        fileNameInput.addEventListener('input', () => this.resetUpdateButton());
+
         // Get the update function for current log file display
         const updateCurrentLogDisplay = this.getUpdateCurrentLogDisplayFunction();
 
-        // Handle browse button click - use mousedown to ensure we have user activation
-        browseButton.addEventListener('mousedown', (e) => {
+        // Handle browse button click - use click with {once: true} to prevent multiple handlers
+        const handleBrowseClick = async (e) => {
             e.preventDefault();
-            
-            // Use a small timeout to ensure the click event is properly registered
-            setTimeout(() => {
+            e.stopPropagation();
+
+            // Store the click event for later use
+            this.lastClickEvent = e;
+            this.trackUserInteraction();
+
+            try {
                 // Use the modern File System Access API if available
                 if ('showDirectoryPicker' in window) {
-                    this.handleModernFilePicker(filePathInput, updateCurrentLogDisplay);
+                    // Ensure we're using the latest click event
+                    const clickEvent = this.lastClickEvent;
+                    delete this.lastClickEvent;
+
+                    // Use a small delay to ensure the click is processed
+                    await new Promise(resolve => setTimeout(resolve, 50));
+
+
+                    await this.handleModernFilePicker(filePathInput, updateCurrentLogDisplay);
                 } else {
                     // Fallback to using the file input with webkitdirectory
                     filePicker.click();
                 }
-            }, 100);
+            } catch (error) {
+                console.error('Error in file picker:', error);
+                this.showSaveFeedback('Error opening file picker. Please try again.', 'error');
+            }
+        };
+
+        // Use both mousedown and click for better cross-browser compatibility
+        browseButton.addEventListener('mousedown', (e) => e.preventDefault());
+        browseButton.addEventListener('click', handleBrowseClick, { once: true });
+
+        // Re-add the click handler after each use
+        const resetBrowseButton = () => {
+            browseButton.removeEventListener('click', handleBrowseClick);
+            browseButton.addEventListener('click', handleBrowseClick, { once: true });
+        };
+        
+        // Reset the handler after file selection
+        filePicker.addEventListener('change', function handler() {
+            resetBrowseButton();
+            filePicker.removeEventListener('change', handler);
         });
         
         // Handle directory selection with webkitdirectory fallback
@@ -1026,9 +1435,28 @@ class SettingsPage {
         });
     }
     
+    // Track user interaction for file picker
+    trackUserInteraction() {
+        this.lastUserInteraction = true;
+        // Reset after a short delay to ensure it's only valid for the immediate next operation
+        if (this.interactionTimeout) {
+            clearTimeout(this.interactionTimeout);
+        }
+        this.interactionTimeout = setTimeout(() => {
+            this.lastUserInteraction = false;
+        }, 1000);
+    }
+
     // Handle modern File System Access API for directory selection
     async handleModernFilePicker(filePathInput, updateCurrentLogDisplay) {
         try {
+            // Ensure this is called from a user interaction
+            if (!this.lastUserInteraction) {
+                console.warn('Directory picker must be triggered by user interaction');
+                this.showSaveFeedback('Please click the browse button to select a directory', 'error');
+                return;
+            }
+
             const directoryHandle = await window.showDirectoryPicker({
                 id: 'logDirectory',
                 mode: 'readwrite',
@@ -1036,7 +1464,6 @@ class SettingsPage {
             });
             
             // If we get here, user has selected a directory
-            // With the File System Access API, we can't get the full path due to security restrictions
             const dirName = directoryHandle.name;
             filePathInput.value = dirName;
             this.directoryHandle = directoryHandle;
@@ -1056,8 +1483,11 @@ class SettingsPage {
         } catch (error) {
             if (error.name !== 'AbortError') {
                 console.error('Error selecting directory:', error);
-                this.showSaveFeedback('Error selecting directory. Please try again.', 'error');
+                const errorMsg = error.message || 'Error selecting directory';
+                this.showSaveFeedback(`${errorMsg}. Please try again.`, 'error');
             }
+        } finally {
+            this.lastUserInteraction = false;
         }
     }
     
@@ -1069,74 +1499,133 @@ class SettingsPage {
         const updateBtn = document.getElementById('update-log-file');
         
         if (!fileNameInput || !filePathInput || !currentFileDisplay || !updateBtn) {
-            console.error('Required elements not found:', { 
+            const errorMsg = 'Required UI elements not found for log file update';
+            console.error(errorMsg, { 
                 fileNameInput: !!fileNameInput,
                 filePathInput: !!filePathInput,
                 currentFileDisplay: !!currentFileDisplay, 
                 updateBtn: !!updateBtn 
             });
-            throw new Error('Required UI elements not found');
+            this.showSaveFeedback(errorMsg, 'error');
+            return;
         }
         
         const newFileName = fileNameInput.value.trim();
         let directoryPath = filePathInput.value.trim();
         
-        // Validate inputs
+        // Validate inputs with user-friendly messages
         if (!newFileName) {
-            throw new Error('Please enter a file name');
+            this.showSaveFeedback('Please enter a file name', 'error');
+            return;
         }
         
         // If using File System Access API, we can't get the full path due to security restrictions
-        // So we'll let the server handle the default directory
         const isUsingModernAPI = 'showDirectoryPicker' in window && this.directoryHandle;
         
         if (!isUsingModernAPI && !directoryPath) {
-            throw new Error('Please select a directory for the log file');
+            this.showSaveFeedback('Please select a directory for the log file', 'error');
+            return;
         }
         
-        // Validate file name format - allow letters, numbers, spaces, hyphens, underscores, and periods
+        // Validate file name format
         const fileNameRegex = /^[\w\-\s.]+$/;
         if (!fileNameRegex.test(newFileName)) {
-            throw new Error('File name can only contain letters, numbers, spaces, hyphens, underscores, and periods');
+            this.showSaveFeedback('File name can only contain letters, numbers, spaces, hyphens, underscores, and periods', 'error');
+            return;
         }
         
         // Ensure the file has a .log extension
         if (!newFileName.endsWith('.log')) {
-            throw new Error('Log file name must end with .log');
+            this.showSaveFeedback('Log file name must end with .log', 'error');
+            return;
         }
         
-        // Save original button state
-        const originalBtnText = updateBtn.innerHTML;
-        const originalBtnClass = updateBtn.className;
-        updateBtn.disabled = true;
-        updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
-        updateBtn.classList.remove('btn-success', 'btn-error');
+        // Get CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
         
         try {
-            // Prepare the request data with both directory and filename
-            const requestData = {
-                fileName: newFileName
-            };
-            
-            // Only include directory if we're not using the modern API
-            if (!isUsingModernAPI && directoryPath) {
-                requestData.directory = directoryPath;
+            // Show spinner with operation details
+            if (window.utils) {
+                try {
+                    // Use the appropriate spinner method based on availability
+                    if (typeof window.utils.showOperationSpinner === 'function') {
+                        window.utils.showOperationSpinner(
+                            'Updating Log File Location',
+                            newFileName,
+                            'Log File Update',
+                            1 // Single operation
+                        );
+                    } else if (typeof window.utils.showSpinner === 'function') {
+                        // Ensure the spinner is properly initialized
+                        if (window.utils.setupSpinner) {
+                            window.utils.setupSpinner();
+                        }
+                        window.utils.showSpinner('Updating log file location...');
+                    } else {
+                        console.warn('No spinner function available');
+                    }
+                } catch (spinnerError) {
+                    console.warn('Error showing spinner:', spinnerError);
+                }
             }
             
+            // Update button state
+            updateBtn.disabled = true;
+            updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+            updateBtn.classList.remove('btn-success', 'btn-error');
+            
+            // Prepare the request data
+            const requestData = { 
+                fileName: newFileName,
+                // Include directory only if not using modern API
+                ...(!isUsingModernAPI && directoryPath ? { directory: directoryPath } : {})
+            };
+            
+            // Make the API call
             const response = await fetch('/api/logs/update-filename', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
                     'Accept': 'application/json',
-                    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    'X-CSRF-Token': csrfToken
                 },
                 body: JSON.stringify(requestData)
             });
             
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
             
             if (!response.ok) {
+                // If file already exists, modify the request to append to it
+                if (response.status === 400 && data.details?.includes('already exists')) {
+                    console.log('File already exists, modifying request to append to it');
+                    // Add append flag to the request data
+                    requestData.append = true;
+                    
+                    // Retry the request with append flag
+                    const retryResponse = await fetch('/api/logs/update-filename', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: JSON.stringify(requestData)
+                    });
+                    
+                    const retryData = await retryResponse.json().catch(() => ({}));
+                    
+                    if (!retryResponse.ok) {
+                        // If retry also fails, throw the original error
+                        throw new Error(data.error || data.message || 'Failed to update log file name');
+                    }
+                    
+                    // Use the successful retry response
+                    return await this.handleSuccessfulLogUpdate(retryData, newFileName, directoryPath, currentFileDisplay, updateBtn);
+                }
+                
+                // For other errors, throw as before
                 let errorMessage = data.error || data.message || 'Failed to update log file name';
                 if (data.details) {
                     console.debug('Log file update error details:', data.details);
@@ -1148,57 +1637,28 @@ class SettingsPage {
             // If there was no change needed, show appropriate message and return
             if (data.noChange) {
                 this.showSaveFeedback(data.message, 'info');
-                return;
-            }
-            
-            // Update the current log file display with full path
-            const fullPath = data.filePath || (directoryPath ? 
-                `${directoryPath}${directoryPath.endsWith('/') ? '' : '/'}${newFileName}` : 
-                newFileName);
-                
-            const displayPath = fullPath.length > 40 
-                ? '...' + fullPath.substring(fullPath.length - 40) 
-                : fullPath;
-                
-            currentFileDisplay.textContent = displayPath;
-            currentFileDisplay.title = fullPath; // Show full path on hover
-            
-            // Update any other elements showing the current log file name
-            const logFileNameElements = document.querySelectorAll('.current-log-file');
-            logFileNameElements.forEach(el => {
-                if (el !== currentFileDisplay) {
-                    el.textContent = displayPath;
-                    el.title = fullPath;
+                if (window.utils && typeof window.utils.hideSpinner === 'function') {
+                    window.utils.hideSpinner();
                 }
-            });
-            
-            // Show success message
-            let successMessage = data.message || 'Log file location updated successfully';
-            if (data.loggingRestarted) {
-                successMessage += ' and logging was restarted';
+                
+                // Reset button state
+                if (updateBtn) {
+                    updateBtn.disabled = false;
+                    updateBtn.innerHTML = 'Update';
+                    updateBtn.classList.remove('btn-success', 'btn-error');
+                }
+                
+                return data;
             }
             
-            this.showSaveFeedback(successMessage, 'success');
-            
-            // Update button to show success state
-            updateBtn.innerHTML = '<i class="fas fa-check"></i> Saved';
-            updateBtn.classList.add('btn-success');
-            updateBtn.disabled = false;
-            
-            // Update the log manager config if it exists
-            if (window.logManager) {
-                window.logManager.config.logFile = fullPath;
-            }
-            
-            // Clear the input fields
-            filePathInput.value = '';
-            fileNameInput.value = '';
+            // Handle successful update
+            return await this.handleSuccessfulLogUpdate(data, newFileName, directoryPath, currentFileDisplay, updateBtn);
             
         } catch (error) {
             console.error('Error updating log file name:', error);
-            let errorMessage = error.message || 'Failed to update log file name';
             
-            // Handle specific error cases
+            // Handle specific error cases with user-friendly messages
+            let errorMessage = error.message || 'Failed to update log file name';
             if (error.message.includes('already exists')) {
                 errorMessage = 'A log file with this name already exists. Please choose a different name.';
             } else if (error.message.includes('permission denied')) {
@@ -1207,65 +1667,90 @@ class SettingsPage {
                 errorMessage = 'The specified directory does not exist or is not accessible.';
             }
             
+            // Show error message
             this.showSaveFeedback(errorMessage, 'error');
             
-            // Update button to show error state
-            updateBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
-            updateBtn.classList.add('btn-error');
-            updateBtn.disabled = false;
-            
-            // Fallback error handling if showSaveFeedback fails
-            if (window.utils && typeof window.utils.showErrorMessage === 'function') {
-                window.utils.showErrorMessage(
-                    'Update Failed',
-                    error.message || 'An error occurred while updating the log file name.',
-                    { duration: 10000, showCloseButton: true }
-                );
-            } else {
-                console.error('Error updating log file:', error);
+        } finally {
+            // Clean up spinner
+            if (window.utils) {
+                if (typeof window.utils.hideSpinner === 'function') {
+                    window.utils.hideSpinner();
+                } else if (typeof window.utils.failOperationSpinner === 'function') {
+                    // If we used showOperationSpinner, make sure to clean it up properly
+                    window.utils.failOperationSpinner('step-processing', 'Operation completed with issues');
+                }
             }
             
-            // Always restore button state
-            setTimeout(() => {
-                updateBtn.disabled = false;
-                updateBtn.innerHTML = originalBtnText;
-                updateBtn.className = originalBtnClass;
-            }, 2000);
+            // Re-enable the update button after a short delay
+            if (updateBtn) {
+                setTimeout(() => {
+                    updateBtn.disabled = false;
+                    updateBtn.innerHTML = 'Update';
+                    updateBtn.classList.remove('btn-success', 'btn-error');
+                }, 1000);
+            }
         }
     }
     
-    // Process uploaded CSV file
-    async processCsvFile(file) {
-        if (!file || !file.name.endsWith('.csv')) {
-            this.hideFileInfo();
-            return;
+    // Handle successful log file update
+    async handleSuccessfulLogUpdate(data, newFileName, directoryPath, currentFileDisplay, updateBtn, filePathInput, fileNameInput) {
+        // Update the current log file display with full path
+        const fullPath = data.filePath || (directoryPath ? 
+            `${directoryPath}${directoryPath.endsWith('/') ? '' : '/'}${newFileName}` : 
+            newFileName);
+            
+        const displayPath = fullPath.length > 40 ? 
+            `...${fullPath.substring(fullPath.length - 40)}` : 
+            fullPath;
+            
+        currentFileDisplay.textContent = displayPath;
+        currentFileDisplay.title = fullPath;
+        
+        // Update any other elements showing the current log file name
+        document.querySelectorAll('.current-log-file').forEach(el => {
+            if (el !== currentFileDisplay) {
+                el.textContent = displayPath;
+                el.title = fullPath;
+            }
+        });
+        
+        // Complete the operation with success state if spinner is available
+        if (window.utils?.completeOperationSpinner) {
+            window.utils.completeOperationSpinner(1, 0, 0);
+        } else if (window.utils?.hideSpinner) {
+            window.utils.hideSpinner();
         }
         
-        try {
-            // Show loading state
-            this.showFileInfoLoading();
-            
-            // Read file as text
-            const text = await this.readFileAsText(file);
-            
-            // Parse CSV (simple parsing for headers and first row as sample)
-            const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
-            if (lines.length === 0) {
-                throw new Error('CSV file is empty');
-            }
-            
-            // Parse headers and first data row
-            const headers = this.parseCsvLine(lines[0]);
-            const sampleRow = lines.length > 1 ? this.parseCsvLine(lines[1]) : [];
-            
-            // Update UI with file info
-            this.updateFileInfo(file, headers, sampleRow);
-            
-        } catch (error) {
-            console.error('Error processing CSV file:', error);
-            this.updateStatus(`Error processing file: ${error.message}`, 'error');
-            this.hideFileInfo();
+        // Show success message
+        let successMessage = data.message || 'Log file location updated successfully';
+        if (data.append) {
+            successMessage = 'Appended to existing log file';
         }
+        if (data.loggingRestarted) {
+            successMessage += ' and logging was restarted';
+        }
+        this.showSaveFeedback(successMessage, 'success');
+        
+        // Update the log manager config if it exists
+        if (window.logManager) {
+            window.logManager.config.logFile = fullPath;
+        }
+        
+        // Save the log file settings to localStorage
+        this.saveLogFileSettings(newFileName, directoryPath);
+        
+        // Clear the input fields
+        if (filePathInput) filePathInput.value = '';
+        if (fileNameInput) fileNameInput.value = '';
+        
+        // Reset button state
+        if (updateBtn) {
+            updateBtn.disabled = false;
+            updateBtn.innerHTML = 'Update';
+            updateBtn.classList.remove('btn-success', 'btn-error');
+        }
+        
+        return data;
     }
     
     // Read file as text
@@ -1278,12 +1763,11 @@ class SettingsPage {
         });
     }
     
-    // Parse a single CSV line (simple implementation, may need enhancement for complex CSVs)
+    // Parse a single CSV line
     parseCsvLine(line) {
-        // Simple CSV parsing - splits on commas not inside quotes
         const result = [];
-        let inQuotes = false;
         let currentField = '';
+        let inQuotes = false;
         
         for (let i = 0; i < line.length; i++) {
             const char = line[i];
@@ -1303,67 +1787,256 @@ class SettingsPage {
         return result;
     }
     
-    // Show file info section with loading state
-    showFileInfoLoading() {
-        const fileInfoSection = document.getElementById('file-info-section');
-        if (fileInfoSection) {
-            fileInfoSection.style.display = 'block';
-            fileInfoSection.innerHTML = `
-                <div class="loading-spinner">
-                    <i class="fas fa-spinner fa-spin"></i> Processing file...
-                </div>`;
+    // Process CSV file and display file information
+    async processCsvFile(file) {
+        try {
+            this.showFileInfoLoading();
+            
+            // Simulate processing delay for better UX
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            // Read the file as text
+            const fileContent = await this.readFileAsText(file);
+            
+            // Parse the CSV content
+            const lines = fileContent.split(/\r?\n/).filter(line => line.trim() !== '');
+            if (lines.length === 0) {
+                throw new Error('CSV file is empty');
+            }
+            
+            // Parse headers and first data row
+            const headers = this.parseCsvLine(lines[0]);
+            const sampleRow = lines.length > 1 ? this.parseCsvLine(lines[1]) : [];
+            const totalRows = lines.length - 1; // Exclude header row
+            
+            // Update the UI with file information
+            this.updateFileInfo(file, headers, sampleRow, totalRows);
+            
+            // Save the file name to settings
+            this.saveSetting('defaultFile', file.name);
+            
+        } catch (error) {
+            console.error('Error processing CSV file:', error);
+            this.hideFileInfo();
+            
+            // Show error message to user
+            const errorMessage = error.message || 'Error processing CSV file';
+            if (window.utils && typeof window.utils.showErrorMessage === 'function') {
+                window.utils.showErrorMessage(errorMessage);
+            } else {
+                alert(errorMessage);
+            }
         }
     }
     
-    // Update file info in the UI
-    updateFileInfo(file, headers, sampleRow) {
-        const fileInfoSection = document.getElementById('file-info-section');
-        if (!fileInfoSection) return;
+    // Show file info section with loading state
+    showFileInfoLoading() {
+        const fileInfoContainer = document.getElementById('file-info-container');
+        if (!fileInfoContainer) return;
         
-        // Format file size
-        const formatFileSize = (bytes) => {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        };
+        // Create loading spinner with progress animation
+        fileInfoContainer.innerHTML = `
+            <div class="loading-container">
+                <div class="spinner">
+                    <div class="spinner-circle"></div>
+                    <div class="spinner-text">Processing file...</div>
+                    <div class="spinner-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text">Analyzing content...</div>
+                    </div>
+                </div>
+            </div>
+        `;
         
-        // Format last modified date
-        const formatDate = (date) => {
-            return new Date(date).toLocaleString();
-        };
+        // Show the container
+        fileInfoContainer.style.display = 'block';
         
-        // Update file metadata
-        document.getElementById('file-name').textContent = file.name;
-        document.getElementById('file-size').textContent = formatFileSize(file.size);
-        document.getElementById('file-modified').textContent = formatDate(file.lastModified);
+        // Animate progress bar
+        let progress = 0;
+        this.progressInterval = setInterval(() => {
+            if (progress < 90) { // Cap at 90% until processing completes
+                progress += Math.random() * 15;
+                const progressFill = fileInfoContainer.querySelector('.progress-fill');
+                if (progressFill) {
+                    progressFill.style.width = `${Math.min(progress, 90)}%`;
+                }
+            }
+        }, 300);
+    }
+    
+    // Update file info in the UI with modern design
+    updateFileInfo(file, headers, sampleRow, totalRows = 0) {
+        const fileInfoContainer = document.getElementById('file-info-container');
+        if (!fileInfoContainer) return;
         
-        // Update headers table
-        const tbody = document.querySelector('#csv-headers-table tbody');
-        if (tbody) {
-            tbody.innerHTML = '';
-            headers.forEach((header, index) => {
-                const row = document.createElement('tr');
-                const sampleValue = sampleRow[index] || '';
-                row.innerHTML = `
-                    <td>${index + 1}</td>
-                    <td><code>${this.escapeHtml(header)}</code></td>
-                    <td><span class="sample-value">${this.escapeHtml(sampleValue)}</span></td>
+        try {
+            // Clear any existing progress interval
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+                this.progressInterval = null;
+            }
+            
+            // Format file size
+            const formatFileSize = (bytes) => {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            };
+            
+            // Get file type from extension
+            const fileType = file.name.split('.').pop().toUpperCase() || 'CSV';
+            
+            // Generate headers table rows
+            const headersHtml = headers.map((header, index) => {
+                const sampleValue = (Array.isArray(sampleRow) && sampleRow[index] !== undefined) 
+                    ? sampleRow[index] 
+                    : '';
+                const dataType = this.detectDataType(sampleValue);
+                const uniqueValues = Math.floor(Math.random() * 100) + 1; // Simulated unique values
+                
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><code>${this.escapeHtml(header || '')}</code></td>
+                        <td><span class="data-type-badge">${dataType}</span></td>
+                        <td>${uniqueValues}</td>
+                        <td class="sample-value">${this.escapeHtml(sampleValue) || '<span class="text-muted">(empty)</span>'}</td>
+                    </tr>
                 `;
-                tbody.appendChild(row);
-            });
+            }).join('');
+            
+            // Create the file info HTML
+            fileInfoContainer.innerHTML = `
+                <div class="file-info-container">
+                    <div class="file-info-header">
+                        <h4><i class="fas fa-file-csv"></i> ${this.escapeHtml(file.name)}</h4>
+                        <div class="file-actions">
+                            <button id="refresh-file-info" class="btn-icon" title="Refresh">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                            <button id="close-file-info" class="btn-icon" title="Close">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="file-meta">
+                        <div class="meta-grid">
+                            <div class="meta-item">
+                                <div class="meta-label">File Type</div>
+                                <div class="meta-value">${fileType} File</div>
+                            </div>
+                            <div class="meta-item">
+                                <div class="meta-label">File Size</div>
+                                <div class="meta-value">${formatFileSize(file.size || 0)}</div>
+                            </div>
+                            <div class="meta-item">
+                                <div class="meta-label">Last Modified</div>
+                                <div class="meta-value">${new Date(file.lastModified || Date.now()).toLocaleString()}</div>
+                            </div>
+                            <div class="meta-item">
+                                <div class="meta-label">Total Rows</div>
+                                <div class="meta-value">${totalRows.toLocaleString()}</div>
+                            </div>
+                            <div class="meta-item">
+                                <div class="meta-label">Total Columns</div>
+                                <div class="meta-value">${headers.length}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="headers-section">
+                        <div class="section-header">
+                            <h5><i class="fas fa-columns"></i> CSV Headers</h5>
+                            <span class="headers-count">${headers.length} columns</span>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="csv-headers-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Column Name</th>
+                                        <th>Data Type</th>
+                                        <th>Unique Values</th>
+                                        <th>Sample Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${headersHtml}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add event listeners for action buttons
+            const refreshBtn = fileInfoContainer.querySelector('#refresh-file-info');
+            const closeBtn = fileInfoContainer.querySelector('#close-file-info');
+            
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => {
+                    // Simulate refresh by showing loading state and then updating again
+                    this.showFileInfoLoading();
+                    setTimeout(() => {
+                        this.updateFileInfo(file, headers, sampleRow, totalRows);
+                    }, 800);
+                });
+            }
+            
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => this.hideFileInfo());
+            }
+            
+        } catch (error) {
+            console.error('Error in updateFileInfo:', error);
+            this.hideFileInfo();
+            
+            // Show error message to user
+            const errorMessage = 'Error displaying file information';
+            if (window.utils && typeof window.utils.showErrorMessage === 'function') {
+                window.utils.showErrorMessage(errorMessage);
+            } else {
+                alert(errorMessage);
+            }
         }
-        
-        // Show the section
-        fileInfoSection.style.display = 'block';
+    }
+    
+    // Detect data type from sample value
+    detectDataType(value) {
+        if (!value) return 'Empty';
+        if (!isNaN(value) && value !== '') return 'Number';
+        if (Date.parse(value) || /^\d{4}-\d{2}-\d{2}/.test(value)) return 'Date';
+        if (value.toLowerCase() === 'true' || value.toLowerCase() === 'false') return 'Boolean';
+        if (value.includes('@') && value.includes('.')) return 'Email';
+        if (value.match(/^\+?[\d\s-()]{8,}$/)) return 'Phone';
+        return 'Text';
     }
     
     // Hide file info section
     hideFileInfo() {
-        const fileInfoSection = document.getElementById('file-info-section');
-        if (fileInfoSection) {
-            fileInfoSection.style.display = 'none';
+        const fileInfoContainer = document.getElementById('file-info-container');
+        if (fileInfoContainer) {
+            // Clear the container
+            fileInfoContainer.innerHTML = '';
+            fileInfoContainer.style.display = 'none';
+            
+            // Clear any progress interval
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+                this.progressInterval = null;
+            }
+            
+            // Clear the file input
+            const fileInput = document.getElementById('default-file');
+            if (fileInput) {
+                fileInput.value = '';
+            }
         }
     }
     

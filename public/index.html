@@ -391,11 +391,8 @@
     <!-- Footer -->
     <footer class="footer" role="contentinfo">
         <div class="footer-content">
-            <div class="footer-logo">
-                <img src="images/logo.png" alt="Ping Identity" class="footer-logo-img" width="120" height="40">
-            </div>
-            <nav class="footer-links" aria-label="Footer navigation">
-                <ul class="footer-links-list">
+            <nav class="footer-nav" aria-label="Footer navigation">
+                <ul class="footer-links">
                     <li><a href="#" class="footer-link">Terms of Service</a></li>
                     <li><span class="footer-separator" aria-hidden="true">|</span></li>
                     <li><a href="#" class="footer-link">Privacy Policy</a></li>
@@ -426,251 +423,126 @@
     
     <!-- Application Scripts (order matters) -->
     <script src="js/utils.js"></script>
-    <script>
-        // Initialize utils before anything else
-        document.addEventListener('DOMContentLoaded', function() {
-            // Create and initialize utils
-            window.utils = new Utils();
-            window.utils.init().then(() => {
-                console.log('Utils initialized successfully');
-            }).catch(error => {
-                console.error('Failed to initialize utils:', error);
-            });
-        });
-    </script>
     <script src="js/main.js"></script>
-    
-    <!-- Initialize the application -->
     <script>
-    // Function to initialize the application
-    function initApplication() {
-        console.log('=== APPLICATION INITIALIZATION STARTED ===');
+    // Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM fully loaded, initializing application...');
         
         // Debug elements
         const debugStatus = document.getElementById('debug-status');
-        const debugFile = document.getElementById('debug-file');
         const debugBtn = document.getElementById('debug-btn');
-        const importBtn = document.getElementById('import-btn');
         const fileInput = document.getElementById('csv-file');
+        const importBtn = document.getElementById('import-btn');
         
-        // Initialize debug status
-        if (debugStatus) {
-            debugStatus.textContent = 'Initializing application...';
-        }
+        // Update current year in footer
+        document.getElementById('current-year').textContent = new Date().getFullYear();
         
-        // Log loaded dependencies
-        console.log('Loaded dependencies:', {
-            Popper: typeof Popper !== 'undefined',
-            axios: typeof axios !== 'undefined',
-            tippy: typeof tippy !== 'undefined',
-            utils: typeof window.utils !== 'undefined',
-            MainPage: typeof MainPage !== 'undefined'
-        });
-        
-        // Check for required elements
-        if (!importBtn) {
-            const errorMsg = 'Error: Import button not found in the DOM';
-            console.error(errorMsg);
-            if (debugStatus) debugStatus.textContent = errorMsg;
+        // Initialize Utils
+        if (typeof Utils === 'undefined') {
+            console.error('Utils is not defined. Check if utils.js loaded correctly.');
+            if (debugStatus) debugStatus.textContent = 'Error: Utils not loaded';
             return;
         }
         
-        if (!fileInput) {
-            const errorMsg = 'Error: File input not found in the DOM';
-            console.error(errorMsg);
-            if (debugStatus) debugStatus.textContent = errorMsg;
-            return;
-        }
+        window.utils = new Utils();
         
-        // Check for required dependencies
-        if (typeof window.utils === 'undefined' || !(window.utils instanceof Utils)) {
-            const errorMsg = 'Error: Utils not properly initialized. Check console for details.';
-            console.error('Utils not properly initialized');
-            if (debugStatus) debugStatus.textContent = errorMsg;
-            return;
-        }
-        
-        if (typeof MainPage === 'undefined') {
-            const errorMsg = 'Error: MainPage class not defined. Check main.js for errors.';
-            console.error('MainPage class is not defined');
-            if (debugStatus) debugStatus.textContent = errorMsg;
-            return;
-        }
-        
-        try {
-            // Initialize the main application
-            console.log('Creating MainPage instance...');
-            window.mainPage = new MainPage();
-            console.log('MainPage instance created:', window.mainPage);
+        window.utils.init().then(() => {
+            console.log('Utils initialized successfully');
             
-            // Verify importUsers method is available
-            if (typeof window.mainPage.importUsers !== 'function') {
-                throw new Error('importUsers method not found on MainPage instance');
+            // Check if MainPage is available
+            if (typeof MainPage === 'undefined') {
+                const errorMsg = 'MainPage is not defined. Check main.js for errors.';
+                console.error(errorMsg);
+                if (debugStatus) debugStatus.textContent = 'Error: ' + errorMsg;
+                return;
             }
-            console.log('importUsers method is available on mainPage instance');
+            
+            // MainPage will initialize itself when the DOM is ready
+            console.log('MainPage initialization complete');
+            
+            // Set up debug button
+            if (debugBtn) {
+                debugBtn.addEventListener('click', async () => {
+                    console.log('Debug button clicked');
+                    if (window.mainPage && window.mainPage.importUsers) {
+                        console.log('Running test import...');
+                        debugStatus.textContent = 'Running test import...';
+                        try {
+                            await window.mainPage.importUsers();
+                            console.log('Test import completed');
+                            debugStatus.textContent = 'Test import completed';
+                        } catch (error) {
+                            console.error('Test import failed:', error);
+                            debugStatus.textContent = 'Test import failed: ' + error.message;
+                        }
+                    } else {
+                        const errorMsg = 'mainPage.importUsers is not available';
+                        console.error(errorMsg);
+                        debugStatus.textContent = errorMsg;
+                    }
+                });
+            }
             
             // Set up file input change handler
-            fileInput.addEventListener('change', function(e) {
-                if (e.target.files.length > 0) {
-                    const file = e.target.files[0];
-                    console.log('File selected:', file.name);
-                    if (debugFile) {
-                        debugFile.textContent = `File: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+            if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                    console.log('File input changed');
+                    if (e.target.files.length > 0) {
+                        const fileName = e.target.files[0].name;
+                        console.log('File selected:', fileName);
+                        if (importBtn) importBtn.disabled = false;
+                        if (debugStatus) debugStatus.textContent = 'Ready: ' + fileName;
+                    } else {
+                        if (importBtn) importBtn.disabled = true;
+                        if (debugStatus) debugStatus.textContent = 'No file selected';
                     }
-                    if (debugStatus) {
-                        debugStatus.textContent = 'File selected - ready to import';
-                    }
-                    importBtn.disabled = false;
-                } else {
-                    console.log('No file selected');
-                    if (debugFile) debugFile.textContent = 'No file selected';
-                    if (debugStatus) debugStatus.textContent = 'No file selected';
-                    importBtn.disabled = true;
-                }
-            });
+                });
+            }
             
-            // Set up import button click handler
-            importBtn.addEventListener('click', function(e) {
-                console.log('=== IMPORT BUTTON CLICKED ===');
-                if (fileInput.files.length > 0) {
-                    const file = fileInput.files[0];
-                    console.log('Processing file:', file.name);
-                    if (debugStatus) {
-                        debugStatus.textContent = `Processing file: ${file.name}`;
-                    }
-                    // Call the import functionality
-                    window.mainPage.importUsers(file);
-                } else {
-                    console.log('No file selected');
-                    if (debugStatus) {
-                        debugStatus.textContent = 'Error: Please select a file first';
-                    }
-                    alert('Please select a CSV file first');
-                }
-            });
-            
-            // Set up debug button click handler if it exists
-            if (debugBtn) {
-                debugBtn.addEventListener('click', function() {
-                    console.log('=== DEBUG BUTTON CLICKED ===');
-                    if (debugStatus) {
-                        debugStatus.textContent = 'Debug: Testing import functionality...';
+            // Set up import button
+            if (importBtn) {
+                importBtn.addEventListener('click', function(e) {
+                    console.log('Import button clicked');
+                    if (!fileInput || !fileInput.files.length) {
+                        const errorMsg = 'Please select a CSV file first';
+                        console.error(errorMsg);
+                        if (debugStatus) debugStatus.textContent = errorMsg;
+                        alert(errorMsg);
+                        return;
                     }
                     
-                    if (fileInput.files.length > 0) {
-                        const fileName = fileInput.files[0].name;
-                        console.log('Debug - File selected:', fileName);
-                        if (debugStatus) {
-                            debugStatus.textContent = `Debug: Testing with file - ${fileName}`;
-                        }
-                    } else {
-                        console.log('Debug - No file selected');
-                        if (debugStatus) debugStatus.textContent = 'Debug: No file selected';
-                    }
-                });
-            }
-            
-            // Initial debug status
-            if (debugStatus) debugStatus.textContent = 'Ready - select a file to begin';
-            console.log('=== APPLICATION INITIALIZATION COMPLETE ===');
-            
-        } catch (error) {
-            console.error('Error during application initialization:', error);
-            if (debugStatus) {
-                debugStatus.textContent = `Initialization error: ${error.message}`;
-            }
-        }
-    }
-    
-    // Wait for DOM to be fully loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        // Initialize the application when the page is fully loaded
-        if (window.utils && window.utils.init) {
-            window.utils.init().then(() => {
-                initApplication();
-            }).catch(error => {
-                console.error('Failed to initialize utils:', error);
-                const debugStatus = document.getElementById('debug-status');
-                if (debugStatus) {
-                    debugStatus.textContent = `Error initializing application: ${error.message}`;
-                }
-            });
-        } else {
-            console.error('Utils not available');
-            const debugStatus = document.getElementById('debug-status');
-            if (debugStatus) {
-                debugStatus.textContent = 'Error: Application utilities not loaded';
-            }
-        }
-    });
-    </script>
-                        }
+                    const file = fileInput.files[0];
+                    console.log('Processing file:', file.name);
+                    
+                    if (window.mainPage && typeof window.mainPage.importUsers === 'function') {
+                        console.log('Starting import...');
+                        if (debugStatus) debugStatus.textContent = 'Starting import...';
                         
-                        // Use the mainPage instance to trigger import
-                        if (window.mainPage && typeof window.mainPage.importUsers === 'function') {
-                            console.log('Calling mainPage.importUsers()...');
-                            window.mainPage.importUsers().catch(error => {
-                                console.error('Import error:', error);
-                                if (debugStatus) {
-                                    debugStatus.textContent = `Error: ${error.message}`;
-                                }
+                        window.mainPage.importUsers()
+                            .then(() => {
+                                console.log('Import completed successfully');
+                                if (debugStatus) debugStatus.textContent = 'Import completed successfully';
+                            })
+                            .catch(error => {
+                                console.error('Import failed:', error);
+                                if (debugStatus) debugStatus.textContent = 'Import failed: ' + (error.message || 'Unknown error');
                             });
-                        } else {
-                            const errorMsg = 'mainPage.importUsers is not a function';
-                            console.error(errorMsg);
-                            if (debugStatus) debugStatus.textContent = errorMsg;
-                        }
                     } else {
-                        console.log('Debug - No file selected');
-                        if (debugStatus) debugStatus.textContent = 'Debug: Please select a file first';
+                        const errorMsg = 'Import functionality not available';
+                        console.error(errorMsg);
+                        if (debugStatus) debugStatus.textContent = errorMsg;
                     }
                 });
             }
             
-            // Initial debug status
-            if (debugStatus) debugStatus.textContent = 'Ready - select a file to begin';
-            console.log('=== APPLICATION INITIALIZATION COMPLETE ===');
+            console.log('Application initialization complete');
+            if (debugStatus) debugStatus.textContent = 'Ready';
             
-        } catch (error) {
-            console.error('Error during application initialization:', error);
-            if (debugStatus) {
-                debugStatus.textContent = `Initialization error: ${error.message}`;
-            }
-        }
-    });
-    </script>
-        }
-        
-        // Add click handler for debugging
-        importBtn.addEventListener('click', function(e) {
-            console.log('=== IMPORT BUTTON CLICKED ===');
-            console.log('Event target:', e.target);
-            debugStatus.textContent = 'Button clicked - checking file...';
-            
-            if (fileInput && fileInput.files.length > 0) {
-                console.log('File selected:', fileInput.files[0].name);
-                debugStatus.textContent = 'File selected: ' + fileInput.files[0].name;
-            } else {
-                console.log('No file selected');
-                debugStatus.textContent = 'Error: No file selected';
-                alert('Please select a CSV file first');
-            }
+        }).catch(error => {
+            console.error('Failed to initialize application:', error);
+            if (debugStatus) debugStatus.textContent = 'Initialization error: ' + error.message;
         });
-        
-        // Monitor file input changes
-        if (fileInput) {
-            fileInput.addEventListener('change', function(e) {
-                console.log('File input changed');
-                if (e.target.files.length > 0) {
-                    console.log('File selected:', e.target.files[0].name);
-                    importBtn.disabled = false;
-                    debugStatus.textContent = 'Ready: ' + e.target.files[0].name;
-                } else {
-                    importBtn.disabled = true;
-                    debugStatus.textContent = 'No file selected';
-                }
-            });
-        }
     });
     </script>
 </body>

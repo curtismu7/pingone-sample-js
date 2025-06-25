@@ -957,30 +957,69 @@ class MainPage {
     /**
      * Handles the import users operation
      */
+    /**
+     * Handles the import users operation
+     */
     async importUsers() {
         if (!this.currentFile) {
             utils.showErrorMessage('No file selected');
             return;
         }
         
+        let spinnerShown = false;
         try {
-            this.updateOperationStatus('import', 'processing');
-            utils.showSpinner('Importing users...');
+            // Show spinner with initial state
+            utils.showSpinner('Preparing to import users...', true);
+            utils.startSpinnerAnimation();
+            spinnerShown = true;
             
+            // Initialize progress tracking
+            this.updateOperationStatus('import', 'processing');
+            utils.startWorkflowSteps();
+            utils.addSpinnerStep('📄 Reading and parsing file...', 'loading', 'step-file');
+            
+            // Read and parse the full file
             const fileContent = await this.readFileAsText(this.currentFile);
-            const parseResult = await this.parseCSVPreview(fileContent);
+            const parseResult = await this.parseCSV(fileContent);
+            
+            if (!parseResult || !parseResult.records || parseResult.records.length === 0) {
+                throw new Error('No valid records found in the file');
+            }
+            
+            // Update progress after file is read
+            utils.updateSpinnerSubtitle(`Found ${parseResult.records.length} records to process`);
+            utils.updateProcessingProgress(0, parseResult.records.length, 'Processing');
             
             const credentials = utils.getSettings();
             if (!credentials || !credentials.environmentId || !credentials.clientId) {
                 throw new Error('PingOne credentials not configured');
             }
             
-            // Process the import
-            const result = await this.processImport(parseResult.firstFewRecords, credentials);
+            // Process all records with progress updates
+            const result = await this.processImport(parseResult.records, credentials, (current, total) => {
+                utils.updateProcessingProgress(current, total, 'Importing');
+                utils.updateProgress(current, total);
+            });
             
             if (result.success) {
-                this.updateOperationStatus('import', 'complete', `Imported ${result.processed || 0} users`);
-                utils.showSuccessMessage(`Successfully imported ${result.processed || 0} users`);
+                const successCount = result.successCount || 0;
+                const errorCount = result.errorCount || 0;
+                const totalProcessed = successCount + errorCount;
+                
+                // Update UI with results
+                utils.completeOperationSpinner(successCount, errorCount, 0);
+                this.updateOperationStatus('import', 'complete', `Processed ${totalProcessed} users`);
+                
+                // Show success message
+                const message = `Successfully processed ${successCount} users` + 
+                              (errorCount > 0 ? ` with ${errorCount} errors` : '');
+                utils.showSuccessMessage(message);
+                
+                // Display detailed results if available
+                if (result.results && result.results.length > 0) {
+                    this.resultsData = result.results;
+                    this.displayResults('Import Results', result.results);
+                }
             } else {
                 throw new Error(result.message || 'Failed to import users');
             }
@@ -988,9 +1027,13 @@ class MainPage {
         } catch (error) {
             console.error('Import error:', error);
             this.updateOperationStatus('import', 'error', error.message);
+            utils.failOperationSpinner('step-processing', error.message);
             utils.showErrorMessage(`Import failed: ${error.message}`);
         } finally {
-            utils.hideSpinner();
+            if (spinnerShown) {
+                // Add a small delay before hiding to show final state
+                setTimeout(() => utils.hideSpinner(), 1000);
+            }
         }
     }
 
@@ -1104,10 +1147,9 @@ class MainPage {
             this.displayModifyPreview(parseResult.firstFewRecords);
             
             // Ask for confirmation before proceeding
-            const confirmed = await utils.showConfirmation(
+            const confirmed = await utils.showConfirmationDialog(
                 'Confirm User Modification',
-                `You are about to modify ${parseResult.firstFewRecords.length} user(s). Do you want to continue?`,
-                { confirmText: 'Yes, Modify Users', cancelText: 'Cancel' }
+                `You are about to modify ${parseResult.firstFewRecords.length} user(s). Do you want to continue?`
             );
             
             if (!confirmed) {
@@ -1267,7 +1309,6 @@ class MainPage {
             // Re-throw the error to be handled by the caller
             throw error;
         } finally {
-            // Always hide the spinner when done
             // Clean up resources
             if (utils.currentOperationController) {
                 // Don't abort here as it might be in use by other operations
@@ -1275,287 +1316,87 @@ class MainPage {
             }
         }
     }
-    
-    /**
-     * Processes the import of user records
-     * @param {Array} records - Array of user records to import
-     * @param {Object} credentials - Authentication credentials
-     * @returns {Promise<Object>} Result of the import operation
-     */
-    async processImport(records, credentials) {
-        // Process bulk user import with real-time progress
-        const startTime = Date.now();
-        let operationId = null;
-        let progressEventSource = null;
-        
-        try {
-            // Initialize operation controller if it doesn't exist
-            if (!utils.currentOperationController) {
-                utils.currentOperationController = new AbortController();
-            }
-            
-            // Prepare the payload with user records
-            const payload = {
-                records: records,
-                environmentId: credentials.environmentId,
-                clientId: credentials.clientId,
-                clientSecret: credentials.clientSecret
-            };
-            
-            // Initialize the spinner with total records count
-            utils.showSpinner('Preparing import operation...', {
-                title: 'Importing Users',
-                total: records.length
-            });
-            
-            // Update status to show we're making the API call
-            utils.updateSpinnerTitle('Sending Import Request');
-            utils.showSpinner('Sending request to server...');
-            
-            const response = await fetch('/api/import/bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: utils.currentOperationController?.signal || null
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                utils.log('Import API error response', 'error', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    errorText: errorText
-                });
-                throw new Error(`HTTP ${response.status}: ${errorText}`);
-            }
-
-            const result = await response.json();
-            operationId = result.operationId;
-            
-            if (!operationId) {
-                throw new Error('No operation ID returned from server');
-            }
-            
-            // Update status to show we're connecting to progress updates
-            utils.updateSpinnerTitle('Import in Progress');
-            utils.showSpinner('Connecting to progress updates...');
-            
-            // Set up progress tracking
-            let processed = 0;
-            let successCount = 0;
-            let errorCount = 0;
-            
-            // Connect to SSE for real-time progress updates
-            return new Promise((resolve, reject) => {
-                const TIMEOUT_MS = 300000; // 5 minutes
-                const progressUrl = `/api/progress/${operationId}`;
-                
-                // Set up timeout
-                const timeoutId = setTimeout(() => {
-                    if (progressEventSource) progressEventSource.close();
-                    reject(new Error('Operation timed out after 5 minutes'));
-                }, TIMEOUT_MS);
-                
-                // Set up SSE connection for progress updates
-                progressEventSource = new EventSource(progressUrl);
-                
-                progressEventSource.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        
-                        // Update progress counters
-                        if (data.type === 'progress') {
-                            processed = data.processed || 0;
-                            successCount = data.success || 0;
-                            errorCount = data.errors || 0;
-                            
-                            // Calculate progress percentage
-                            const progress = Math.min(100, Math.round((processed / records.length) * 100));
-                            
-                            // Update UI
-                            utils.updateSpinnerProgress(progress);
-                            utils.updateSpinnerCounters({
-                                success: successCount,
-                                failed: errorCount,
-                                skipped: 0
-                            });
-                            
-                            // Show current status
-                            const status = `Processing record ${processed} of ${records.length} (${progress}%)`;
-                            utils.showSpinner(status);
-                            
-                            // Log detailed progress
-                            if (data.message) {
-                                utils.addSpinnerDetails(`${data.status}: ${data.message}`);
-                            }
-                            
-                            // Check if operation is complete
-                            if (data.complete) {
-                                clearTimeout(timeoutId);
-                                progressEventSource.close();
-                                
-                                const duration = Date.now() - startTime;
-                                const durationSec = (duration / 1000).toFixed(1);
-                                
-                                utils.log('Import operation completed', 'info', {
-                                    operationId,
-                                    durationMs: duration,
-                                    recordsProcessed: processed,
-                                    success: successCount,
-                                    errors: errorCount
-                                });
-                                
-                                // Show completion message
-                                utils.updateSpinnerTitle('Import Complete');
-                                utils.showSpinner(`Processed ${processed} records in ${durationSec} seconds`);
-                                
-                                // Auto-close after delay
-                                setTimeout(() => {
-                                    utils.hideSpinner();
-                                    resolve({
-                                        success: errorCount === 0,
-                                        processed,
-                                        successCount,
-                                        errorCount,
-                                        duration
-                                    });
-                                }, 2000);
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Error processing progress update:', error);
-                    }
-                };
-                
-                progressEventSource.onerror = (error) => {
-                    console.error('SSE error:', error);
-                    clearTimeout(timeoutId);
-                    progressEventSource.close();
-                    reject(new Error('Connection to progress updates failed'));
-                };
-            });
-            
-        } catch (error) {
-            console.error('Import processing error:', error);
-            utils.log('Import operation failed', 'error', {
-                operationId,
-                error: error.message,
-                stack: error.stack
-            });
-            
-            // Update UI with error
-            utils.updateSpinnerTitle('Import Failed');
-            utils.showSpinner(`Error: ${error.message}`);
-            
-            // Auto-close after delay
-            setTimeout(() => {
-                utils.hideSpinner();
-            }, 5000);
-            
-            throw error;
-            
-        } finally {
-            // Clean up resources
-            if (progressEventSource) {
-                progressEventSource.close();
-            }
-            
-            if (utils && utils.currentOperationController) {
-                // Don't abort here as it might be in use by other operations
-                utils.currentOperationController = null;
-            }
-        }
-    }
 
     /**
-     * Parses CSV content for preview display
+     * Parses CSV content
      * @param {string} content - The CSV content to parse
-     * @returns {Object} Object containing header and first few records
+     * @param {number} [maxRows] - Optional maximum number of rows to parse
+     * @returns {Object} Object containing header and records
      */
-    async parseCSVPreview(content) {
+    async parseCSV(content, maxRows) {
         try {
             if (!content || typeof content !== 'string') {
                 throw new Error('Invalid CSV content');
             }
 
-            // Parse CSV content
+            // Parse CSV content with explicit line splitting
             const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
             if (lines.length === 0) {
                 throw new Error('Empty CSV file');
             }
 
-            // Extract header row
-            const header = [];
-            let inHeaderQuotes = false;
-            let currentHeader = [];
-            
-            // Parse header with proper quote handling
-            for (let i = 0; i < lines[0].length; i++) {
-                const char = lines[0][i];
-                
-                if (char === '"') {
-                    inHeaderQuotes = !inHeaderQuotes;
-                } else if (char === ',' && !inHeaderQuotes) {
-                    header.push(currentHeader.join('').trim().replace(/^"|"$/g, ''));
-                    currentHeader = [];
-                } else {
-                    currentHeader.push(char);
-                }
-            }
-            // Add the last header field
-            if (currentHeader.length > 0 || lines[0].endsWith(',')) {
-                header.push(currentHeader.join('').trim().replace(/^"|"$/g, ''));
-            }
+            // Extract header row - explicitly split by comma and clean up quotes/whitespace
+            const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            const records = [];
+            const rowLimit = maxRows ? Math.min(lines.length, maxRows + 1) : lines.length;
 
             // Process data rows
-            const firstFewRecords = [];
-            const maxPreviewRows = 5;
-
-            for (let i = 1; i < Math.min(lines.length, maxPreviewRows + 1); i++) {
+            for (let i = 1; i < rowLimit; i++) {
                 const line = lines[i];
                 if (!line || line.trim() === '') continue;
 
-                // Handle quoted values that might contain commas
-                const values = [];
+                // Simple CSV parsing - split by comma and clean up quotes
+                let values = [];
                 let inQuotes = false;
-                let currentValue = [];
-                
+                let currentValue = '';
+
                 for (let j = 0; j < line.length; j++) {
                     const char = line[j];
-                    
+
                     if (char === '"') {
                         inQuotes = !inQuotes;
                     } else if (char === ',' && !inQuotes) {
-                        values.push(currentValue.join('').trim().replace(/^"|"$/g, ''));
-                        currentValue = [];
+                        values.push(currentValue.trim().replace(/^"|"$/g, ''));
+                        currentValue = '';
                     } else {
-                        currentValue.push(char);
+                        currentValue += char;
                     }
                 }
-                
-                // Add the last value
-                if (currentValue.length > 0 || line.endsWith(',')) {
-                    values.push(currentValue.join('').trim().replace(/^"|"$/g, ''));
-                }
-                
+                // Add the last value and clean it up
+                values.push(currentValue.trim().replace(/^"|"$/g, ''));
+
                 // Create record object
                 const record = {};
                 header.forEach((key, index) => {
                     record[key] = values[index] || '';
                 });
                 
-                firstFewRecords.push(record);
+                records.push(record);
             }
 
             return {
                 header,
-                firstFewRecords,
+                records,
                 totalRecords: lines.length - 1 // Subtract 1 for header
             };
         } catch (error) {
-            console.error('Error parsing CSV preview:', error);
-            throw new Error(`Failed to parse CSV: ${error.message}`);
+            console.error('Error parsing CSV:', error);
+            throw error;
         }
+    }
+
+    /**
+     * Parses CSV content for preview display (first 5 rows)
+     * @param {string} content - The CSV content to parse
+     * @returns {Object} Object containing header and first few records
+     */
+    async parseCSVPreview(content) {
+        const result = await this.parseCSV(content, 5);
+        return {
+            header: result.header,
+            firstFewRecords: result.records,
+            totalRecords: result.totalRecords
+        };
     }
 
     /**
@@ -1596,14 +1437,7 @@ class MainPage {
                     statusElement.textContent = status;
             }
             
-            // Update button text based on status
-            if (status === 'complete' || status === 'error') {
-                // Reset button after delay
-                setTimeout(() => {
-                    statusElement.textContent = 'Ready';
-                    statusElement.className = 'status-badge ready';
-                }, 5000);
-            }
+            // No longer automatically resetting to 'Ready' status
             
         } catch (error) {
             console.error('Error updating operation status:', error);
@@ -1720,25 +1554,51 @@ class MainPage {
                 utils.connectToProgress(result.operationId, 'import');
             }
             
-            // Wait for operation to complete (spinner hidden)
-            await new Promise((resolve) => {
+            // Wait for operation to complete (spinner hidden) with proper error handling
+            await new Promise((resolve, reject) => {
                 const TIMEOUT_MS = 300000; // 5 minutes
                 const POLL_INTERVAL = 100; // Check every 100ms
                 let elapsed = 0;
+                let timeoutId = null;
                 
                 const checkComplete = () => {
                     const spinner = document.getElementById('spinner-overlay');
-                    if (spinner && spinner.classList.contains('hidden')) {
+                    
+                    // If spinner is hidden, resolve the promise
+                    if (spinner && (spinner.classList.contains('hidden') || spinner.style.display === 'none')) {
+                        clearTimeout(timeoutId);
                         resolve();
-                    } else if (elapsed >= TIMEOUT_MS) {
-                        throw new Error('Operation timed out after 5 minutes');
-                    } else {
-                        elapsed += POLL_INTERVAL;
-                        setTimeout(checkComplete, POLL_INTERVAL);
+                        return;
                     }
+                    
+                    // If timeout reached, reject the promise
+                    if (elapsed >= TIMEOUT_MS) {
+                        clearTimeout(timeoutId);
+                        const error = new Error('Operation timed out after 5 minutes');
+                        error.name = 'TimeoutError';
+                        reject(error);
+                        return;
+                    }
+                    
+                    // Otherwise, schedule the next check
+                    elapsed += POLL_INTERVAL;
+                    timeoutId = setTimeout(checkComplete, POLL_INTERVAL);
                 };
                 
-                checkComplete();
+                // Start checking
+                timeoutId = setTimeout(checkComplete, POLL_INTERVAL);
+                
+                // Clean up on unmount
+                return () => {
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
+                    }
+                };
+            }).catch(error => {
+                console.error('Error in checkComplete:', error);
+                // Make sure to hide the spinner on error
+                utils.hideSpinner();
+                throw error; // Re-throw to be caught by the outer catch
             });
             
             const duration = Date.now() - startTime;
@@ -1772,6 +1632,8 @@ class MainPage {
 
     async processModify(records, credentials) {
         const startTime = Date.now();
+        let spinnerShown = false;
+        let operationCompleted = false;
         
         try {
             // Initialize operation controller if it doesn't exist
@@ -1779,8 +1641,9 @@ class MainPage {
                 utils.currentOperationController = new AbortController();
             }
             
-            // Update status to show we're making the API call
+            // Show spinner for the operation
             utils.showSpinner('Sending modify request to server...');
+            spinnerShown = true;
             
             const payload = {
                 users: records,
@@ -1821,37 +1684,77 @@ class MainPage {
             
             // Connect to SSE for real-time progress updates
             if (result.operationId) {
+                // Store the operation ID for progress tracking
+                this.currentOperationId = result.operationId;
+                
+                // Connect to progress updates
                 utils.connectToProgress(result.operationId, 'modify');
-            }
-            
-            // Wait for operation to complete (spinner hidden)
-            await new Promise((resolve) => {
-                const timeout = setTimeout(resolve, 300000); // 5 minute timeout
-                const checkComplete = () => {
-                    const spinner = document.getElementById('spinner-overlay');
-                    if (spinner && spinner.classList.contains('hidden')) {
-                        clearTimeout(timeout);
-                        resolve();
-                    } else {
-                        setTimeout(checkComplete, 100);
-                    }
+                
+                // Wait for operation to complete with a timeout
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        if (!operationCompleted) {
+                            utils.failOperationSpinner('Operation timed out');
+                            utils.showErrorMessage('Operation timed out after 5 minutes');
+                            operationCompleted = true;
+                            spinnerShown = false;
+                            resolve();
+                        }
+                    }, 300000); // 5 minute timeout
+                    
+                    // Listen for operation completion
+                    const onComplete = () => {
+                        if (!operationCompleted) {
+                            clearTimeout(timeout);
+                            operationCompleted = true;
+                            resolve();
+                        }
+                    };
+                    
+                    // Set up completion handler
+                    this.onComplete = onComplete;
+                });
+                
+                // Update spinner with final status
+                utils.completeOperationSpinner(
+                    result.successCount || 0,
+                    result.errorCount || 0,
+                    result.skippedCount || 0
+                );
+                
+                return {
+                    success: true,
+                    successCount: result.successCount || 0,
+                    errorCount: result.errorCount || 0,
+                    skippedCount: result.skippedCount || 0,
+                    results: result.results || [],
+                    duration: Date.now() - startTime
                 };
-                checkComplete();
-            });
-            
-            const duration = Date.now() - startTime;
-            
-            return {
-                ...result,
-                duration
-            };
+            } else {
+                throw new Error('No operation ID received from server');
+            }
         } catch (error) {
             console.error('Modify processing error:', error);
+            if (spinnerShown) {
+                utils.failOperationSpinner('Operation failed: ' + error.message);
+                spinnerShown = false;
+            }
             throw error;
         } finally {
             // Clean up the controller
             if (utils.currentOperationController) {
+                if (!utils.currentOperationController.signal.aborted) {
+                    utils.currentOperationController.abort();
+                }
                 utils.currentOperationController = null;
+            }
+            
+            // Ensure spinner is hidden in all cases
+            if (spinnerShown) {
+                utils.hideSpinner();
+            }
+            if (spinnerShown) {
+                utils.hideSpinner();
             }
         }
     }
@@ -2126,14 +2029,26 @@ async function waitForDependencies() {
 if (typeof window !== 'undefined') {
     window.MainPage = MainPage;
     console.log('MainPage class exported to window.MainPage');
-}
-
-// Start the application when the DOM is fully loaded
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-        waitForDependencies().then(initializeApp).catch(console.error);
-    });
-} else {
-    // DOMContentLoaded has already fired
-    waitForDependencies().then(initializeApp).catch(console.error);
+    
+    // Initialize when the page is fully loaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM fully loaded, initializing MainPage...');
+            try {
+                window.mainPage = new MainPage();
+                console.log('MainPage instance created successfully');
+            } catch (error) {
+                console.error('Failed to initialize MainPage:', error);
+            }
+        });
+    } else {
+        // DOMContentLoaded has already fired
+        console.log('DOM already loaded, initializing MainPage...');
+        try {
+            window.mainPage = new MainPage();
+            console.log('MainPage instance created successfully');
+        } catch (error) {
+            console.error('Failed to initialize MainPage:', error);
+        }
+    }
 }

@@ -621,17 +621,17 @@
                         <div class="spinner-content">
                             <!-- Header Section -->
                             <div class="spinner-header">
-                                <div class="spinner-header-main">
-                                    <div class="spinner-icon-container">
-                                        <div class="spinner-icon"></div>
-                                    </div>
-                                    <div class="spinner-title-section">
-                                        <h3 id="spinner-title">Processing Operation</h3>
-                                        <div id="spinner-subtitle" class="spinner-subtitle">Initializing...</div>
-                                    </div>
+                                <div class="spinner-icon-container">
+                                    <div class="spinner-icon"></div>
+                                </div>
+                                <div class="spinner-title-section">
+                                    <h3 id="spinner-title">Processing</h3>
+                                    <div id="spinner-subtitle" class="spinner-subtitle">Initializing...</div>
                                 </div>
                                 <div id="spinner-header-btn-container" class="spinner-header-actions">
-                                    <button id="spinner-cancel" class="cancel-btn">Cancel Operation</button>
+                                    <button id="spinner-cancel" class="cancel-btn" title="Cancel operation">
+                                        <i class="fas fa-times"></i>
+                                    </button>
                                 </div>
                             </div>
 
@@ -639,7 +639,7 @@
                             <div id="spinner-details" class="spinner-details">
                                 <div class="operation-info">
                                     <div class="info-row">
-                                        <span class="info-label">Operation Type:</span>
+                                        <span class="info-label">Type:</span>
                                         <span id="operation-type" class="info-value">-</span>
                                     </div>
                                     <div class="info-row">
@@ -647,15 +647,11 @@
                                         <span id="operation-file" class="info-value">-</span>
                                     </div>
                                     <div class="info-row">
-                                        <span class="info-label">Records:</span>
-                                        <span id="operation-records" class="info-value">-</span>
-                                    </div>
-                                    <div class="info-row">
                                         <span class="info-label">Started:</span>
                                         <span id="operation-start-time" class="info-value">-</span>
                                     </div>
                                     <div class="info-row">
-                                        <span class="info-label">Elapsed Time:</span>
+                                        <span class="info-label">Elapsed:</span>
                                         <span id="operation-elapsed" class="info-value">-</span>
                                     </div>
                                 </div>
@@ -664,21 +660,18 @@
                             <!-- Progress Section -->
                             <div id="spinner-progress-section" class="spinner-progress-section">
                                 <div class="progress-header">
-                                    <span class="progress-label">Overall Progress</span>
+                                    <span class="progress-label">Progress</span>
                                     <span id="progress-percentage" class="progress-percentage">0%</span>
                                 </div>
                                 <div class="progress-bar-container">
-                                    <div id="progress-bar" class="progress-bar">
-                                        <div id="progress-fill" class="progress-fill"></div>
-                                    </div>
+                                    <div id="progress-fill" class="progress-fill"></div>
                                 </div>
-                                <div id="spinner-progress" class="spinner-progress hidden"></div>
                             </div>
 
                             <!-- Real-time Stats Section -->
                             <div id="spinner-stats" class="spinner-stats">
                                 <div class="stats-header">
-                                    <span class="stats-label">Batch Processing Status</span>
+                                    <span class="stats-label">Status</span>
                                     <span class="stats-batch-info">(updates every 5 records)</span>
                                 </div>
                                 <div class="stats-content">
@@ -698,50 +691,41 @@
                                         <span id="batch-skipped-badge" class="stats-badge warning-badge">+0</span>
                                     </div>
                                     <div class="stats-row">
-                                        <span class="stats-label">Current Batch:</span>
+                                        <span class="stats-label">Batch:</span>
                                         <span id="batch-progress" class="stats-value">0/5</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Steps Section -->
-                            <div id="spinner-steps" class="spinner-steps"></div>
-
-                            <!-- Status Summary -->
-                            <div id="spinner-status-summary" class="spinner-status-summary hidden">
-                                <div class="status-summary-header">
-                                    <h4>Operation Summary</h4>
+                            <!-- Steps Section (hidden by default) -->
+                            <div id="spinner-steps" class="spinner-steps hidden">
+                                <div class="steps-header">
+                                    <h4>Processing Steps</h4>
                                 </div>
-                                <div class="status-summary-content">
-                                    <div class="summary-row">
-                                        <span class="summary-label">Successful:</span>
-                                        <span id="summary-success" class="summary-value success">0</span>
-                                    </div>
-                                    <div class="summary-row">
-                                        <span class="summary-label">Failed:</span>
-                                        <span id="summary-failed" class="summary-value error">0</span>
-                                    </div>
-                                    <div class="summary-row">
+                                <div id="spinner-steps-container" class="steps-container">
+                                    <!-- Steps will be added here dynamically -->
                                         <span class="summary-label">Total Time:</span>
                                         <span id="summary-time" class="summary-value">-</span>
                                     </div>
                                 </div>
                             </div>
-
-                            <!-- Footer Section -->
-                            <div id="spinner-footer-btn-container" class="spinner-footer-btn-container hidden">
-                                <button id="spinner-close" class="close-btn">Close</button>
+                            
+                            <!-- Footer with Close Button -->
+                            <div class="spinner-footer">
+                                <button id="spinner-close" class="btn-close">Close</button>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
+                </div>`;
+                
             document.body.insertAdjacentHTML('beforeend', spinnerHTML);
-
+            
             // Setup cancel button
             document.getElementById('spinner-cancel').addEventListener('click', () => {
                 this.cancelCurrentOperation();
             });
+            
+            // Setup close button
             document.getElementById('spinner-close').addEventListener('click', () => {
                 this.hideSpinner();
             });
@@ -757,22 +741,37 @@
     }
 
     showSpinner(text = 'Loading...', showSteps = false) {
-        // Show basic loading spinner
-        // DEBUG: If spinner doesn't appear, check CSS classes and DOM structure
-        const spinner = document.getElementById('spinner-overlay');
+        // Ensure spinner exists in the DOM
+        let spinner = document.getElementById('spinner-overlay');
+        
+        // If spinner doesn't exist, initialize it
+        if (!spinner) {
+            this.setupSpinner();
+            spinner = document.getElementById('spinner-overlay');
+            
+            // If still doesn't exist after initialization, log error and return
+            if (!spinner) {
+                console.error('Failed to initialize spinner');
+                return;
+            }
+        }
+        
+        // Now safely get other elements
         const title = document.getElementById('spinner-title');
         const steps = document.getElementById('spinner-steps');
-        const progress = document.getElementById('spinner-progress');
-
-        if (!spinner) {
-            this.log('Spinner system not initialized', 'error');
+        const progress = document.getElementById('spinner-progress-section');
+        
+        if (!title || !steps || !progress) {
+            console.error('Failed to find required spinner elements');
             return;
         }
 
+        // Update spinner content and state
         title.textContent = text;
         steps.style.display = showSteps ? 'block' : 'none';
         progress.classList.add('hidden');
         
+        // Show the spinner
         spinner.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
 
@@ -1377,13 +1376,17 @@
     }
 
     // Connect to SSE for real-time progress updates
-    connectToProgress(operationId) {
+    connectToProgress(operationId, operationType = 'import') {
         if (this.sseConnection) {
             this.sseConnection.close();
         }
 
         this.currentOperationId = operationId;
-        this.sseConnection = new EventSource(`/api/import/progress/${operationId}`);
+        this.currentOperationType = operationType;
+        
+        // Use the appropriate endpoint based on operation type
+        const endpoint = `/api/${operationType}/progress/${operationId}`;
+        this.sseConnection = new EventSource(endpoint);
         
         this.sseConnection.onmessage = (event) => {
             try {
@@ -1395,8 +1398,18 @@
         };
 
         this.sseConnection.onerror = (error) => {
-            this.log('SSE connection error', 'error', { error });
+            this.log('SSE connection error', 'error', { 
+                operationType,
+                operationId,
+                error: error.message || 'Unknown error'
+            });
         };
+        
+        this.log('SSE connection established', 'debug', {
+            operationType,
+            operationId,
+            endpoint
+        });
     }
 
     // Handle real-time progress updates from backend
@@ -1604,9 +1617,23 @@ window.Utils = Utils;
 // Create and expose the utils instance
 window.utils = new Utils();
 
-// Log initialization
-console.log('Utils initialized and available globally as window.utils and window.Utils');
+// Expose spinner methods directly on utils instance for backward compatibility
+window.utils.showOperationSpinner = window.utils.showOperationSpinner || function(message, fileName, operationType, recordCount) {
+    return this.showOperationSpinner(message, fileName, operationType, recordCount);
+}.bind(window.utils);
 
+window.utils.failOperationSpinner = window.utils.failOperationSpinner || function(stepId, error) {
+    return this.failOperationSpinner(stepId, error);
+}.bind(window.utils);
+
+// Initialize utils when the DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.utils.init();
+    });
+} else {
+    window.utils.init();
+}
 })(); // End of IIFE
 
 // Export for Node.js/CommonJS if needed
