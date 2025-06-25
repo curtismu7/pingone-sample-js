@@ -1,3 +1,69 @@
+/* Import Font Awesome from CDN */
+@import 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
+
+/* Footer Styles */
+.footer {
+    background-color: var(--ping-white);
+    border-top: 1px solid var(--border);
+    padding: 1.5rem 2rem;
+    margin-top: auto;
+    width: 100%;
+}
+
+.footer-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+}
+
+.footer-logo {
+    margin-bottom: 1rem;
+}
+
+.footer-logo-img {
+    height: 30px;
+    width: auto;
+}
+
+.footer-links {
+    margin: 0.5rem 0;
+}
+
+.footer-links-list {
+    display: flex;
+    list-style: none;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0;
+    margin: 0;
+}
+
+.footer-link {
+    color: var(--ping-gray-dark);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: color 0.2s;
+}
+
+.footer-link:hover {
+    color: var(--ping-red);
+    text-decoration: underline;
+}
+
+.footer-separator {
+    color: var(--ping-gray-medium);
+}
+
+.footer-copyright {
+    color: var(--ping-gray-dark);
+    font-size: 0.875rem;
+}
+
 /* Ping Identity Brand Colors - Consistent Palette */
 :root {
     --ping-red: #c8102e;           /* Primary Ping red for buttons */
@@ -1051,8 +1117,167 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 .file-metadata { margin-top: 1rem; padding: 1rem; background-color: var(--ping-blue-secondary); border-radius: 4px; }
 .metadata-item { margin-bottom: 0.5rem; }
 .metadata-item:last-child { margin-bottom: 0; }
+/* Modify Preview Section */
+#modify-preview {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: var(--ping-white);
+    border-radius: 8px;
+    border: 1px solid var(--ping-gray-medium);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+#modify-preview h4 {
+    margin-top: 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--ping-gray-medium);
+}
+
+/* Attribute Table Styling */
+.attribute-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 0.9rem;
+}
+
+.attribute-table th,
+.attribute-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border: 1px solid var(--ping-gray-medium);
+}
+
+.attribute-table th {
+    background-color: var(--ping-blue-secondary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.attribute-table tr:nth-child(even) {
+    background-color: var(--ping-gray-light);
+}
+
+.attribute-table tr:hover {
+    background-color: rgba(200, 16, 46, 0.05);
+}
+
+.attribute-table code {
+    background-color: #f1f1f1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85em;
+}
+
+/* Pagination Controls */
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 15px;
+    gap: 10px;
+}
+
+.pagination-controls button {
+    padding: 5px 12px;
+    border: 1px solid var(--ping-gray-medium);
+    background-color: var(--ping-white);
+    color: var(--text-primary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+    background-color: var(--ping-blue-secondary);
+    border-color: var(--ping-blue-primary);
+    color: var(--ping-blue-primary);
+}
+
+.pagination-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-controls span {
+    margin: 0 10px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* Note text */
+.note {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-top: 10px;
+}
+
+/* Status Messages */
 .success-text { color: var(--text-success); font-weight: 600; }
 .error-text { color: var(--text-error); font-weight: 600; }
+
+/* Test Credentials Status */
+#test-credentials-status {
+    margin-left: 10px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#test-credentials-status.success {
+    background-color: rgba(46, 125, 50, 0.1);
+    color: #2e7d32;
+    border-left: 3px solid #2e7d32;
+}
+
+#test-credentials-status.error {
+    background-color: rgba(211, 47, 47, 0.1);
+    color: #d32f2f;
+    border-left: 3px solid #d32f2f;
+}
+
+/* Loading Spinner */
+#test-credentials-loading .fa-spinner {
+    color: #ffffff;
+    font-size: 0.9em;
+}
+
+/* Button with loading state */
+#test-credentials.loading {
+    position: relative;
+    padding-right: 2.5rem;
+}
+
+.action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .action-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    #test-credentials-status {
+        margin-left: 0;
+        margin-top: 8px;
+        text-align: center;
+        display: block;
+    }
+}
 
 /* File Status Box */
 .file-status-box {
@@ -1212,9 +1437,6 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 }
 
 .close-btn:hover {
-    background: #e0e7ef;
-    color: #1e293b;
-    border-color: #a5b4fc;
 }
 
 /* Legacy spinner styles for backward compatibility */
@@ -1895,7 +2117,9 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.3s ease-out, padding 0.3s ease-out;
-    padding: 0 1.5rem;
+    padding: 0;
+    opacity: 0;
+    visibility: hidden;
 }
 
 .advanced-section.open .advanced-header i {
@@ -1903,8 +2127,11 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 }
 
 .advanced-section.open .advanced-content {
-    max-height: 500px;
-    padding: 1.5rem;
+    max-height: 1000px;
+    padding: 1rem 1.5rem 1.5rem;
+    opacity: 1;
+    visibility: visible;
+    transition: max-height 0.3s ease-in, padding 0.3s ease-in, opacity 0.3s ease-in, visibility 0.3s ease-in;
 }
 
 /* Modify Users Section Enhancements */
@@ -2420,6 +2647,59 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
     word-break: break-word;
 }
 
+/* Advanced Settings Section */
+.advanced-section {
+    margin: 1.5rem 0;
+    border: 1px solid var(--ping-gray-medium);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.advanced-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1.25rem;
+    background-color: var(--ping-gray-light);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+}
+
+.advanced-header:hover {
+    background-color: var(--ping-gray-medium);
+}
+
+.advanced-header h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--ping-blue-deep);
+}
+
+.advanced-header i {
+    transition: transform 0.3s ease;
+}
+
+.advanced-section.open .advanced-header i {
+    transform: rotate(180deg);
+}
+
+.advanced-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 1.25rem;
+    background-color: var(--ping-white);
+}
+
+.advanced-section.open .advanced-content {
+    max-height: 500px; /* Adjust based on content height */
+    padding: 1.25rem;
+    border-top: 1px solid var(--ping-gray-medium);
+}
+
 /* Collapsible Header */
 .collapsible-header {
     display: flex;
@@ -2795,4 +3075,236 @@ h2 { font-size: 1.1rem; font-weight: 600; margin: 0; }
 }
 .file-details {
     padding: 0.5rem 0 0.5rem 0;
-} 
+}
+
+/* Enhanced Spinner */
+.spinner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+    transition: opacity 0.3s ease;
+}
+
+.spinner.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.spinner-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    text-align: left;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    position: relative;
+}
+
+.spinner-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--ping-gray-medium);
+}
+
+.spinner-title {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--ping-blue-deep);
+}
+
+.spinner-close {
+    font-size: 1.8rem;
+    cursor: pointer;
+    color: var(--ping-gray-dark);
+    line-height: 1;
+    padding: 0.5rem;
+    margin: -0.5rem -0.5rem -0.5rem 1rem;
+}
+
+.spinner-close:hover {
+    color: var(--ping-red);
+}
+
+.spinner-icon {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(13, 28, 43, 0.1);
+    border-top-color: var(--ping-red);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Progress Bar */
+.progress-container {
+    width: 100%;
+    height: 8px;
+    background-color: var(--ping-gray-medium);
+    border-radius: 4px;
+    margin: 1.5rem 0;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background-color: var(--ping-red);
+    transition: width 0.3s ease;
+}
+
+/* Progress Stats */
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin: 1.5rem 0;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 6px;
+    background-color: var(--ping-gray-light);
+}
+
+.stat-item.success {
+    background-color: rgba(40, 167, 69, 0.1);
+}
+
+.stat-item.warning {
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.stat-item.error {
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--ping-gray-dark);
+}
+
+.stat-value {
+    font-weight: 600;
+    font-family: monospace;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    background-color: white;
+    border: 1px solid var(--ping-gray-medium);
+}
+
+.stat-item.success .stat-value {
+    color: #28a745;
+    border-color: #28a745;
+}
+
+.stat-item.warning .stat-value {
+    color: #ffc107;
+    border-color: #ffc107;
+}
+
+.stat-item.error .stat-value {
+    color: #dc3545;
+    border-color: #dc3545;
+}
+
+/* Spinner Actions */
+.spinner-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--ping-gray-medium);
+}
+
+.spinner-cancel-btn {
+    padding: 0.6rem 1.5rem;
+    background-color: var(--ping-red);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.spinner-cancel-btn:hover {
+    background-color: var(--ping-red-hover);
+    transform: translateY(-1px);
+}
+
+.spinner-cancel-btn:active {
+    transform: translateY(0);
+}
+
+/* Spinner Details */
+.spinner-details {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 1rem;
+    font-size: 0.875rem;
+    text-align: left;
+    background-color: var(--ping-gray-light);
+    border-radius: 6px;
+    padding: 0.75rem;
+}
+
+.spinner-detail {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--ping-gray-medium);
+}
+
+.spinner-detail:last-child {
+    border-bottom: none;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 480px) {
+    .spinner-content {
+        width: 95%;
+        padding: 1.5rem 1rem;
+    }
+    
+    .progress-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .spinner-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .spinner-close {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+    }
+}

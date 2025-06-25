@@ -1,384 +1,340 @@
-// ============================================================================
-// PINGONE USER MANAGEMENT - LOG MANAGER
-// ============================================================================
-// Handles structured logging for all PingOne API operations
-// Features: One-line API calls, clear section dividers, library loads
-
 const winston = require('winston');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
+const fsSync = require('fs');
+const { promisify } = require('util');
+const writeFile = promisify(fsSync.writeFile);
+const readFile = promisify(fsSync.readFile);
+const exists = promisify(fsSync.exists);
+const mkdir = promisify(fsSync.mkdir);
 
 class LogManager {
     constructor() {
         this.logDirectory = path.join(__dirname, '../../logs');
+        this.stateFile = path.join(this.logDirectory, 'logging-state.json');
         this.config = {
-            isLogging: true,
-            logFile: 'import-status.log',
+            isLogging: false, // Default to false, will be loaded from state
+            logFile: path.join(this.logDirectory, 'import-status.log'),
+            maxLogEntries: 1000
         };
+        this.logs = [];
         this.fileTransport = null;
-        this.logger = this.createLogger();
-        this.ensureLogDirectory();
         
-        // Load saved configuration if it exists
-        this.loadConfig();
+        // Ensure log directory exists and is writable
+        if (!this.ensureLogDirectory()) {
+            console.error('Failed to initialize log directory. Logging to console only.');
+            return;
+        }
         
-        // Start file logging if enabled
-        if (this.config.isLogging) {
-            this.startFileLogging();
+        // Load previous state if it exists
+        this.loadState().then(() => {
+            this.logger = this.createLogger();
+            console.log(`Logging to: ${this.config.logFile}`);
+            
+            // If logging was active, restart it
+            if (this.config.isLogging) {
+                this.startFileLogging();
+            }
+        }).catch(err => {
+            console.error('Failed to load logging state:', err);
+            // Always initialize a console logger as fallback
+            this.logger = winston.createLogger({
+                level: process.env.LOG_LEVEL || 'info',
+                transports: [new winston.transports.Console()],
+                exitOnError: false
+            });
+        });
+    }
+    
+    /**
+     * Load logging state from file
+     */
+    async loadState() {
+        try {
+            if (await exists(this.stateFile)) {
+                const data = await readFile(this.stateFile, 'utf8');
+                const state = JSON.parse(data);
+                this.config.isLogging = !!state.isLogging;
+                console.log('Loaded logging state:', this.config.isLogging ? 'active' : 'inactive');
+            } else {
+                console.log('No previous logging state found, using default state');
+            }
+        } catch (error) {
+            console.error('Error loading logging state:', error);
+            this.config.isLogging = false;
+        }
+    }
+    
+    /**
+     * Save current logging state to file
+     */
+    async saveState() {
+        try {
+            const state = {
+                isLogging: this.config.isLogging,
+                timestamp: new Date().toISOString()
+            };
+            await writeFile(this.stateFile, JSON.stringify(state, null, 2), 'utf8');
+        } catch (error) {
+            console.error('Error saving logging state:', error);
+        }
+    }
+
+    ensureLogDirectory() {
+        try {
+            if (!fsSync.existsSync(this.logDirectory)) {
+                fsSync.mkdirSync(this.logDirectory, { 
+                    recursive: true,
+                    mode: 0o755 // Ensure proper permissions
+                });
+            }
+            // Verify directory is writable
+            fsSync.accessSync(this.logDirectory, fsSync.constants.W_OK);
+            return true;
+        } catch (error) {
+            console.error(`Failed to initialize log directory: ${error.message}`);
+            // Fall back to a temporary directory if the default one fails
+            this.logDirectory = path.join(require('os').tmpdir(), 'pingone-logs');
+            try {
+                if (!fsSync.existsSync(this.logDirectory)) {
+                    fsSync.mkdirSync(this.logDirectory, { recursive: true });
+                }
+                return true;
+            } catch (fallbackError) {
+                console.error(`Failed to initialize fallback log directory: ${fallbackError.message}`);
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Start file logging by adding a file transport to the logger
+     */
+    async startFileLogging() {
+        try {
+            // If file transport already exists, remove it first
+            if (this.fileTransport) {
+                this.logger.remove(this.fileTransport);
+            }
+
+            // Create a new file transport with human-readable format
+            this.fileTransport = new winston.transports.File({
+                filename: this.config.logFile,
+                level: 'info',
+                format: winston.format.combine(
+                    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+                    winston.format.printf(({ timestamp, level, message, ...meta }) => {
+                        // Convert meta to string if it exists
+                        const metaString = Object.keys(meta).length 
+                            ? ` ${JSON.stringify(meta, null, 2)}` 
+                            : '';
+                        return `[${timestamp}] ${level.toUpperCase()}: ${message}${metaString}`;
+                    })
+                ),
+                maxsize: 10 * 1024 * 1024, // 10MB
+                maxFiles: 5,
+                tailable: true,
+                handleExceptions: true,
+                json: false // Disable JSON formatting for better readability
+            });
+
+            // Add the file transport to the logger
+            this.logger.add(this.fileTransport);
+            this.config.isLogging = true;
+            
+            // Save the state
+            await this.saveState();
+            console.log(`File logging started: ${this.config.logFile}`);
+            
+            // Add a test message to the log file
+            this.logger.info('*** Test *** - Logging started successfully');
+            return true;
+        } catch (error) {
+            console.error('Failed to start file logging:', error);
+            this.config.isLogging = false;
+            return false;
+        }
+    }
+
+    /**
+     * Stop file logging by removing the file transport from the logger
+     */
+    async stopFileLogging() {
+        try {
+            if (this.fileTransport) {
+                this.logger.remove(this.fileTransport);
+                this.fileTransport = null;
+            }
+            this.config.isLogging = false;
+            
+            // Save the state
+            await this.saveState();
+            console.log('File logging stopped');
+            return true;
+        } catch (error) {
+            console.error('Failed to stop file logging:', error);
+            return false;
         }
     }
 
     createLogger() {
-        const structuredFormat = winston.format.combine(
+        // Create a format for console output
+        const consoleFormat = winston.format.combine(
+            winston.format.colorize(),
             winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-            winston.format.errors({ stack: true }),
             winston.format.printf(info => {
-                if (info.structured) {
-                    return `[${info.timestamp}] ${info.message}`;
-                } else {
-                    // Format regular logs as clean text
-                    const { timestamp, level, message, service, ...rest } = info;
-                    const meta = Object.entries(rest)
-                        .filter(([key]) => !['timestamp', 'level', 'message', 'service'].includes(key))
-                        .map(([key, value]) => {
-                            if (value === null || value === undefined) return '';
-                            if (typeof value === 'object') {
-                                return `${key}: ${JSON.stringify(value).replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}`;
-                            }
-                            return `${key}: ${value}`;
-                        })
-                        .filter(Boolean)
-                        .join(' | ');
-                    
-                    return `[${timestamp}] ${level.toUpperCase()}: ${message}${meta ? ' | ' + meta : ''}`;
+                const { timestamp, level, message, ...meta } = info;
+                let logMessage = `[${timestamp}] ${level}: ${message}`;
+                if (Object.keys(meta).length > 0) {
+                    logMessage += ' ' + JSON.stringify(meta, null, 2);
                 }
+                return logMessage;
             })
         );
 
-        const logger = winston.createLogger({
-            level: 'info',
-            format: structuredFormat,
-            defaultMeta: { service: 'pingone-user-management' },
-            transports: [
-                new winston.transports.Console({
-                    format: winston.format.combine(
-                        winston.format.colorize(),
-                        winston.format.printf(info => {
-                            let logMessage = `[${info.timestamp}] ${info.level}: ${info.message}`;
-                            const splat = info[Symbol.for('splat')];
-                            if (splat && splat.length) {
-                                const meta = splat[0];
-                                const metaString = JSON.stringify(meta, null, 2);
-                                if (metaString !== '{}') {
-                                    logMessage += `\n${metaString}`;
-                                }
-                            }
-                            return logMessage;
-                        })
-                    )
+        // Create a format for file output
+        const fileFormat = winston.format.combine(
+            winston.format.timestamp(),
+            winston.format.json()
+        );
+
+        // Configure transports
+        const transports = [
+            new winston.transports.Console({
+                format: consoleFormat,
+                handleExceptions: true
+            })
+        ];
+
+        // Add file transport if logging is enabled
+        if (this.config.isLogging) {
+            transports.push(
+                new winston.transports.File({
+                    filename: path.join(this.logDirectory, this.config.logFile),
+                    format: fileFormat,
+                    maxsize: 5242880, // 5MB
+                    maxFiles: 5,
+                    tailable: true
                 })
-            ]
+            );
+        }
+
+        // Create the logger
+        const logger = winston.createLogger({
+            level: process.env.LOG_LEVEL || 'info',
+            format: winston.format.errors({ stack: true }),
+            defaultMeta: { service: 'user-service' },
+            transports: transports,
+            exitOnError: false
         });
+
+        // Add development logging
+        if (process.env.NODE_ENV === 'development') {
+            logger.on('data', (info) => {
+                const logMethod = console[info.level] || console.log;
+                logMethod(`[${info.timestamp}] ${info.level.toUpperCase()}:`, info.message, info);
+            });
+        }
+
         return logger;
     }
 
-    ensureLogDirectory() {
-        if (!fs.existsSync(this.logDirectory)) {
-            fs.mkdirSync(this.logDirectory, { recursive: true });
-        }
-    }
-
-    getLogFilePath() {
-        return path.join(this.logDirectory, this.config.logFile);
-    }
-
-    logStructured(message, type = 'info') {
-        // Add transaction separators for better readability
-        if (message.startsWith('===')) {
-            const separator = '\n' + '*'.repeat(80) + '\n';
-            this.logger.info(separator + message, { structured: true });
-        } else if (message.includes('[started ]')) {
-            this.logger.info('\n' + '*'.repeat(40) + ' NEW TRANSACTION ' + '*'.repeat(40), { structured: true });
-            this.logger.info(message, { structured: true });
-        } else if (message.includes('[success]') || message.includes('[error  ]')) {
-            this.logger.info(message, { structured: true });
-            this.logger.info('*'.repeat(80), { structured: true });
-        } else if (message.includes('Import operation completed') || message.includes('Sending import response')) {
-            // Create a box around import completion messages
-            const lines = message.split('\n');
-            const maxLength = Math.max(...lines.map(line => line.length));
-            const border = '╔' + '═'.repeat(maxLength + 2) + '╗';
-            const emptyLine = '║ ' + ' '.repeat(maxLength) + ' ║';
-            
-            let boxedMessage = `\n${border}\n`;
-            boxedMessage += emptyLine + '\n';
-            
-            for (const line of lines) {
-                const padding = ' '.repeat(maxLength - line.length);
-                boxedMessage += `║ ${line}${padding} ║\n`;
-            }
-            
-            boxedMessage += `${emptyLine}\n`;
-            boxedMessage += '╚' + '═'.repeat(maxLength + 2) + '╝\n';
-            
-            this.logger.info(boxedMessage, { structured: true });
+    // Basic logging methods
+    error(message, meta) {
+        if (this.logger && typeof this.logger.error === 'function') {
+            this.logger.error(message, meta);
         } else {
-            this.logger[type](message, { structured: true });
+            console.error('Logger not initialized:', message, meta);
         }
     }
 
-    startFileLogging() {
-        try {
-            if (this.fileTransport) {
-                this.stopFileLogging();
-            }
-            
-            const logPath = this.getLogFilePath();
-            this.fileTransport = new winston.transports.File({
-                filename: logPath,
-                format: winston.format.combine(
-                    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-                    winston.format.json()
-                )
-            });
-            
-            this.logger.add(this.fileTransport);
-            this.config.isLogging = true;
-            this.saveConfig();
-            this.logger.info('File logging started', { logFile: logPath });
-        } catch (error) {
-            this.logger.error('Failed to start file logging', { error: error.message });
-            throw error;
+    warn(message, meta) {
+        if (this.logger && typeof this.logger.warn === 'function') {
+            this.logger.warn(message, meta);
+        } else {
+            console.warn('Logger not initialized:', message, meta);
         }
     }
 
-    async stopFileLogging() {
-        try {
-            if (this.fileTransport) {
-                // Ensure all logs are flushed before removing the transport
-                await new Promise(resolve => {
-                    this.fileTransport.on('finish', resolve);
-                    this.logger.remove(this.fileTransport);
-                    // Force close the stream
-                    if (this.fileTransport._stream && !this.fileTransport._stream.closed) {
-                        this.fileTransport._stream.end();
-                    }
-                    this.fileTransport = null;
-                });
-                
-                this.config.isLogging = false;
-                this.saveConfig();
-                this.logger.info('File logging stopped');
-            }
-            return true;
-        } catch (error) {
-            console.error('Failed to stop file logging:', error);
-            this.logger.error('Failed to stop file logging', { error: error.message });
-            throw error;
+    info(message, meta) {
+        if (this.logger && typeof this.logger.info === 'function') {
+            this.logger.info(message, meta);
+        } else {
+            console.info('Logger not initialized:', message, meta);
         }
     }
 
-    updateConfig(newConfig) {
-        this.config = { ...this.config, ...newConfig };
+    debug(message, meta) {
+        if (this.logger && typeof this.logger.debug === 'function') {
+            this.logger.debug(message, meta);
+        } else {
+            console.debug('Logger not initialized:', message, meta);
+        }
+    }
+
+    // Structured logging for specific events
+    logStructured(message) {
+        if (message === null || message === undefined) {
+            this.warn('logStructured called with null or undefined message');
+            return;
+        }
         
-        // Save config to file
-        this.saveConfig();
-        
-        // Restart file logging if log file changed or logging was toggled
-        if (newConfig.logFile || newConfig.isLogging !== undefined) {
-            this.stopFileLogging();
-            if (this.config.isLogging) {
-                this.startFileLogging();
-            }
-        }
-    }
-
-    clearLogFile() {
-        const logPath = this.getLogFilePath();
-        if (fs.existsSync(logPath)) {
-            fs.truncateSync(logPath, 0);
-            this.logStructured(`Log file cleared: ${this.config.logFile}`);
-            return true;
-        }
-        return false;
-    }
-
-    getLogContent() {
         try {
-            const logPath = this.getLogFilePath();
-            if (!fs.existsSync(logPath)) {
-                return '';
-            }
-            return fs.readFileSync(logPath, 'utf8');
-        } catch (error) {
-            throw new Error(`Failed to read log file: ${error.message}`);
-        }
-    }
-
-    saveConfig() {
-        try {
-            const configPath = path.join(this.logDirectory, 'logging-config.json');
-            fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2));
-        } catch (error) {
-            this.logger.error('Failed to save logging config', { error: error.message });
-        }
-    }
-    
-    loadConfig() {
-        try {
-            const configPath = path.join(this.logDirectory, 'logging-config.json');
-            if (fs.existsSync(configPath)) {
-                const configData = fs.readFileSync(configPath, 'utf8');
-                this.config = { ...this.config, ...JSON.parse(configData) };
+            const messageStr = String(message);
+            if (messageStr.startsWith('===')) {
+                const separator = '\n' + '*'.repeat(80) + '\n';
+                this.info(separator + messageStr);
+            } else {
+                this.info(messageStr);
             }
         } catch (error) {
-            this.logger.error('Failed to load logging config', { error: error.message });
+            console.error('Error in logStructured:', error);
+            this.error('Error in logStructured:', { error: error.message });
         }
     }
 
-    // ============================================================================
-    // LIBRARY LOADS AND SERVER EVENTS
-    // ============================================================================
-    logLibraryLoad(libraryName, version = 'unknown') {
-        this.logStructured(`LIBRARY LOAD: ${libraryName} v${version}`);
+    // Log server startup
+    logServerStart(port) {
+        this.info('=== Server Starting ===');
+        this.info(`Server is running on port ${port}`, {
+            environment: process.env.NODE_ENV || 'development',
+            nodeVersion: process.version,
+            platform: process.platform,
+            memory: {
+                rss: `${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`,
+                heap: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`
+            }
+        });
     }
 
-    logServerStart(port = 3002) {
-        this.logStructured('\n********************************************************************************');
-        this.logStructured('SERVER START: PingOne User Management Server');
-        this.logStructured(`PORT: ${port}`);
-        this.logStructured('********************************************************************************\n');
-    }
-
-    logServerStop() {
-        this.logStructured('\n********************************************************************************');
-        this.logStructured('SERVER STOP: PingOne User Management Server');
-        this.logStructured('********************************************************************************\n');
-    }
-
-    // ============================================================================
-    // TOKEN MANAGEMENT
-    // ============================================================================
-    logWorkerTokenRequested() {
-        this.logStructured('\n********************************************************************************');
-        this.logStructured('TOKEN EVENT: Requested worker token');
-    }
-
-    logWorkerTokenReceived(expiresInMinutes = 55) {
-        this.logStructured(`TOKEN EVENT: Worker token received (expires in ${expiresInMinutes} minutes) ✅`);
-        this.logStructured('********************************************************************************\n');
-    }
-
-    logWorkerTokenFailed() {
-        this.logStructured('TOKEN EVENT: Worker token request failed ❌');
-        this.logStructured('********************************************************************************\n');
-    }
-
-    logWorkerTokenReused(timeRemaining) {
-        this.logStructured(`TOKEN EVENT: Worker token reused from cache (${timeRemaining} remaining)`);
-        this.logStructured('********************************************************************************\n');
-    }
-
-    // ============================================================================
-    // OPERATION SECTIONS
-    // ============================================================================
-    logFileSelected(filename, recordCount) {
-        this.logStructured(`FILE SELECTED: ${filename} (${recordCount} records)`);
-    }
-
-    logActionStarted(action, recordCount = null) {
-        this.logStructured('\n********************************************************************************');
-        this.logStructured(`${action.toUpperCase()} OPERATION START`);
-        if (recordCount) {
-            this.logStructured(`RECORDS TO PROCESS: ${recordCount}`);
-        }
-        this.logStructured('********************************************************************************');
-    }
-
-    logActionComplete(action, successCount, skippedCount = 0, failedCount = 0) {
-        this.logStructured('********************************************************************************');
-        this.logStructured(`${action.toUpperCase()} OPERATION COMPLETE`);
-        this.logStructured(`RESULTS: Success=${successCount}, Skipped=${skippedCount}, Failed=${failedCount}`);
-        this.logStructured('********************************************************************************\n');
-    }
-
-    logImportOperation(successCount, totalCount, duration) {
-        this.logStructured('\n********************************************************************************');
-        this.logStructured('IMPORT OPERATION SUMMARY');
-        this.logStructured(`TOTAL RECORDS: ${totalCount}`);
-        this.logStructured(`SUCCESSFUL: ${successCount}`);
-        this.logStructured(`FAILED: ${totalCount - successCount}`);
-        this.logStructured(`DURATION: ${duration}ms`);
-        this.logStructured(`SUCCESS RATE: ${Math.round((successCount / totalCount) * 100)}%`);
-        this.logStructured('********************************************************************************\n');
-    }
-
-    logModifyOperation(successCount, totalCount, duration) {
-        this.logStructured('\n********************************************************************************');
-        this.logStructured('MODIFY OPERATION SUMMARY');
-        this.logStructured(`TOTAL RECORDS: ${totalCount}`);
-        this.logStructured(`SUCCESSFUL: ${successCount}`);
-        this.logStructured(`FAILED: ${totalCount - successCount}`);
-        this.logStructured(`DURATION: ${duration}ms`);
-        this.logStructured(`SUCCESS RATE: ${Math.round((successCount / totalCount) * 100)}%`);
-        this.logStructured('********************************************************************************\n');
-    }
-
-    logDeleteOperation(successCount, totalCount, notFoundCount = 0, duration) {
-        this.logStructured('\n********************************************************************************');
-        this.logStructured('DELETE OPERATION SUMMARY');
-        this.logStructured(`TOTAL RECORDS: ${totalCount}`);
-        this.logStructured(`SUCCESSFUL: ${successCount}`);
-        this.logStructured(`NOT FOUND: ${notFoundCount}`);
-        this.logStructured(`FAILED: ${totalCount - successCount - notFoundCount}`);
-        this.logStructured(`DURATION: ${duration}ms`);
-        this.logStructured(`SUCCESS RATE: ${Math.round((successCount / totalCount) * 100)}%`);
-        this.logStructured('********************************************************************************\n');
-    }
-
-    // ============================================================================
-    // INDIVIDUAL API CALLS (ONE LINE EACH)
-    // ============================================================================
-    logUserAction(action, details) {
-        const { username, userId, status, message } = details;
-        const user = username || userId || 'unknown';
-        this.logStructured(`API CALL [${action.toUpperCase()}]: ${user} - ${status} - ${message}`);
-    }
-
-    logBulkProgress(processed, total, action = 'Processing') {
-        const percentage = Math.round((processed / total) * 100);
-        this.logStructured(`PROGRESS [${action}]: ${processed}/${total} (${percentage}%)`);
-    }
-
-    logClientError(logEntry) {
-        this.logStructured(`CLIENT ERROR: ${logEntry.message}`);
-        if (logEntry.data) {
-            this.logStructured(`ERROR DETAILS: ${JSON.stringify(logEntry.data)}`);
-        }
-    }
-
-    // ============================================================================
-    // STANDARD LOGGING METHODS
-    // ============================================================================
-    log(level, message, meta = {}) {
-        this.logger.log(level, message, meta);
-    }
-
-    info(message, meta = {}) {
-        this.logger.info(message, meta);
-    }
-
-    error(message, meta = {}) {
-        this.logger.error(message, meta);
-    }
-
-    warn(message, meta = {}) {
-        this.logger.warn(message, meta);
-    }
-
-    debug(message, meta = {}) {
-        this.logger.debug(message, meta);
+    // Audit logging for security-related events
+    audit(action, details = {}) {
+        this.info('AUDIT:', {
+            action,
+            timestamp: new Date().toISOString(),
+            ...details
+        });
     }
 }
 
-module.exports = new LogManager(); 
+// Create a singleton instance
+const logManager = new LogManager();
+
+// Log uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => {
+    logManager.error('Uncaught Exception:', { 
+        error: error.message, 
+        stack: error.stack 
+    });
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logManager.error('Unhandled Rejection at:', { 
+        promise, 
+        reason: reason instanceof Error ? reason.message : reason 
+    });
+    process.exit(1);
+});
+
+module.exports = logManager;
