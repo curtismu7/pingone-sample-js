@@ -3,7 +3,7 @@ const axios = require('axios');
 // Remove hardcoded values
 // const PINGONE_ENV_ID = '7853c888-ad7d-470c-add6-597397698767';
 // const CLIENT_ID = '83b39696-7c9d-4012-b9b2-8b4bfc9327ac';
-// const CLIENT_SECRET = '***REMOVED-PINGONE-WORKER-SECRET***';
+// const CLIENT_SECRET = 'YOUR_CLIENT_SECRET';
 
 async function getWorkerToken(environmentId, clientId, clientSecret) {
   const tokenUrl = `https://auth.pingone.com/${environmentId}/as/token`;
